@@ -1,6 +1,6 @@
 # builds
 cmake-build*
 .idea*
-
+*tmp_*
 # logs
 logs**/

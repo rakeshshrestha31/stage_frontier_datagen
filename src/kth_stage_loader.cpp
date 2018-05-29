@@ -33,7 +33,7 @@ int KTHStageLoader::loadDirectory(std::string dataset_dir)
   return floorplan_graphs_.size() > 0;
 }
 
-std::vector<cv::Point> KTHStageLoader::getRandomUnobstructedPoints(const floorplanGraph &graph)
+std::vector<cv::Point> KTHStageLoader::getUnobstructedPoints(const floorplanGraph &graph)
 {
   cv::Mat floorplan_map = floorplan::GraphFileOperations::getGraphLayout(graph, MAP_RESOLUTION, MAP_SIZE);
 
@@ -42,8 +42,6 @@ std::vector<cv::Point> KTHStageLoader::getRandomUnobstructedPoints(const floorpl
   cv::Mat inflation_kernel = cv::getStructuringElement(cv::MORPH_RECT,
                                                        cv::Size( 2*inflation_size + 1, 2*inflation_size+1 ),
                                                        cv::Point( inflation_size, inflation_size ) );
-  std::cout << inflation_size << std::endl << inflation_kernel << std::endl;
-
   cv::Mat inflated_map = floorplan_map.clone();
   cv::erode(floorplan_map, inflated_map, inflation_kernel);
 

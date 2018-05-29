@@ -47,7 +47,7 @@ public:
    * @param graph floorplan graph
    * @return random free points
    */
-  static std::vector<cv::Point> getRandomUnobstructedPoints(const floorplanGraph &graph);
+  static std::vector<cv::Point> getUnobstructedPoints(const floorplanGraph &graph);
 
 
 
