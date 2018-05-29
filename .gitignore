@@ -1,0 +1,6 @@
+# builds
+cmake-build*
+.idea*
+
+# logs
+logs**/
