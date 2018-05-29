@@ -71,7 +71,6 @@ public:
         MAP_SIZE,
         MAP_RESOLUTION
       );
-      std::cout << free_points.at(random_index) << std::endl;
 
       cv::Mat map = floorplan::GraphFileOperations::saveGraphLayoutToPNG(TMP_FLOORPLAN_BITMAP, floorplan, MAP_RESOLUTION, MAP_SIZE);
 
@@ -93,7 +92,7 @@ public:
       cv::circle(rgb_image, free_points.at(random_index), 2, cv::Scalar(255, 255, 255), -1);
 
       std::string floorplan_name = floorplan.m_property->floorname;
-      auto extension_start = floorplan_name.find_last_of(".");
+      auto extension_start = floorplan_name.find_last_of('.');
       if (extension_start != std::string::npos)
       {
         floorplan_name = floorplan_name.substr(0, extension_start);
@@ -138,8 +137,13 @@ public:
       std::ofstream tmp_worldfile_stream(tmp_worldfile);
       tmp_worldfile_stream << worldfile_content;
       tmp_worldfile_stream.close();
-      std::system(
-        (std::string("rosrun stage_ros stageros ") + tmp_worldfile).c_str()
+
+      int status;
+      status = std::system(
+        (std::string("rosrun stage_ros stageros ") + tmp_worldfile + " __name:=stageros").c_str()
+      );
+      status = std::system(
+        (std::string("rosnode kill /stageros")).c_str()
       );
     }
   }
