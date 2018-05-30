@@ -118,11 +118,6 @@ bool SimpleExplorationController::updatePlan()
       current_path_.header.frame_id = "map";
       current_path_.header.stamp = ros::Time::now();
 
-      if (plan_update_callback_)
-      {
-        plan_update_callback_(*this);
-      }
-
       if (exploration_plan_pub_.getNumSubscribers() > 0)
       {
         exploration_plan_pub_.publish(current_path_);
@@ -131,6 +126,11 @@ bool SimpleExplorationController::updatePlan()
     else
     {
       ROS_INFO("planner failed");
+    }
+
+    if (plan_update_callback_)
+    {
+      plan_update_callback_(*this, status);
     }
   });
 

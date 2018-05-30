@@ -13,6 +13,8 @@
 #include <random>
 #include <ctime>
 #include <cstdlib>
+#include <signal.h>
+
 
 // ROS includes
 #include <ros/ros.h>
@@ -21,6 +23,7 @@
 // custom includes
 #include <stage_frontier_datagen/kth_stage_loader.h>
 #include <stage_frontier_datagen/simple_exploration_controller.h>
+#include <stage_frontier_datagen/utils.h>
 
 // boost includes
 #include <boost/shared_ptr.hpp>
@@ -31,14 +34,21 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
-  void newPlanCallback(const SimpleExplorationController &exploration_controller)
+  void newPlanCallback(const SimpleExplorationController &exploration_controller, bool planner_status)
   {
     ROS_INFO("Received new plan");
+    planner_status_ = planner_status;
+
+    if (planner_status)
+    {
+
+    }
   }
 
   KTHStageNode()
     : private_nh_("~"),
-      exploration_controller_(new SimpleExplorationController())
+      exploration_controller_(new SimpleExplorationController()),
+      planner_status_(true)
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
     {
@@ -48,7 +58,7 @@ public:
     last_path_.header.stamp = ros::Time(0);
 
     kth_stage_loader_.loadDirectory(dataset_dir_);
-    exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1));
+    exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
     run();
   }
@@ -57,33 +67,37 @@ public:
 
   void runStageWorld(std::string worldfile)
   {
+    int pipe;
+
+    auto roslaunch_process = utils::popen2(
+      (std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), &pipe
+    );
+
     char buffer[128];
-    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
+
+//    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
     ros::Duration(STAGE_LOAD_SLEEP).sleep();
+
+    planner_status_ = true;
     exploration_controller_->startExploration();
+
 
     try
     {
-      while (!feof(pipe))
+//      while (!feof(pipe) && planner_status_)
+      while (!read(pipe, buffer, 128) && planner_status_)
       {
-        if (fgets(buffer, 128, pipe) != NULL)
+//        if (fgets(buffer, 128, pipe) != NULL)
           std:cout << buffer << std::endl;
       }
     }
     catch (...)
     {
-      pclose(pipe);
       ROS_ERROR("stage world died unexpectedly");
+      return;
     }
-    pclose(pipe);
 
-//    int status;
-//    status = std::system(
-//      (std::string("rosrun stage_ros stageros ") + worldfile + " __name:=stageros").c_str()
-//    );
-//    status = std::system(
-//      (std::string("rosnode kill /stageros")).c_str()
-//    );
+    kill(roslaunch_process, SIGKILL);
   }
 
   void run()
@@ -197,6 +211,7 @@ protected:
   std::string dataset_dir_;
 
   nav_msgs::Path last_path_;
+  boost::atomic_bool planner_status_;
 
 };
 

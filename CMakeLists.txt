@@ -157,6 +157,7 @@ add_executable(kth_stage_node
   src/kth_stage_node.cpp
   src/kth_stage_loader.cpp
   src/simple_exploration_controller.cpp
+  src/utils.cpp
 )
 
 ## Rename C++ executable without prefix

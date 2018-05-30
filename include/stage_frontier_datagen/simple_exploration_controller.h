@@ -64,7 +64,7 @@ public:
    *
    * @param callback callback function to call when new plan received
    */
-  void subscribeNewPlan(boost::function<void(const SimpleExplorationController&)> callback)
+  void subscribeNewPlan(boost::function<void(const SimpleExplorationController&, bool)> callback)
   {
     plan_update_callback_ = callback;
   }
@@ -77,7 +77,7 @@ protected:
 
   boost::mutex path_mutex_;
   boost::atomic_bool is_planner_running_;
-  boost::function<void(const SimpleExplorationController&)> plan_update_callback_;  ///< callback on plan update
+  boost::function<void(const SimpleExplorationController&, bool)> plan_update_callback_;  ///< callback on plan update
 
   ros::Publisher vel_pub_;
   ros::Publisher exploration_plan_pub_;
