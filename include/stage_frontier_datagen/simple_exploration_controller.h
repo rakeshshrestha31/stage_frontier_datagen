@@ -13,6 +13,8 @@
 
 #include <boost/shared_ptr.hpp>
 
+namespace stage_frontier_datagen
+{
 class SimpleExplorationController
 {
 public:
@@ -20,22 +22,37 @@ public:
 
   /**
    * @brief runs hector_navigation_planner methods to get navigation path based on exploration transform optimization
-   * @param path navigation path
    * @return status
    */
-  bool getNavPath(nav_msgs::Path &path);
+  bool getNavPath();
 
   /**
    * @brief timer callback function to run planner
    * @param e reference to ROS Timer Event that was used to invoke the method
    */
-  void timerPlanExploration(const ros::TimerEvent& e);
+  void timerPlanExploration(const ros::TimerEvent &e);
 
   /**
    * @brief timer callback function to publish command velocity
    * @param e reference to ROS Timer Event that was used to invoke the method
    */
-  void timerCmdVelGeneration(const ros::TimerEvent& e);
+  void timerCmdVelGeneration(const ros::TimerEvent &e);
+
+  /**
+   * @brief start the timer events for exploration
+   */
+  void startExploration();
+
+  /**
+   * @brief stop the timer events for exploration (+ sends 0 cmd_vel for safety once)
+   */
+  void stopExploration();
+
+  /**
+   * @brief updates path for the path follower
+   * @param path the path to update
+   */
+  void updatePath(nav_msgs::Path &path);
 
 
 protected:
@@ -43,13 +60,18 @@ protected:
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner_;
   pose_follower::HectorPathFollower path_follower_;
 
+  boost::mutex path_mutex_;
+  boost::atomic_bool is_planner_running_;
+
   ros::Publisher vel_pub_;
   ros::Publisher exploration_plan_pub_;
-
+  ros::NodeHandle nh_;
   tf::TransformListener tfl_;
 
   ros::Timer exploration_plan_generation_timer_;
   ros::Timer cmd_vel_generator_timer_;
-};
 
+  bool is_planner_initialized_;
+};
+} // namespace stage_frontier_datagen
 #endif //STAGE_FRONTIER_DATAGEN_SIMPLE_EXPLORATION_CONTROLLER_H

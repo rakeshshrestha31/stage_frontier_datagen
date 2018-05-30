@@ -33,59 +33,151 @@
 
 #include <stage_frontier_datagen/simple_exploration_controller.h>
 
-SimpleExplorationController::SimpleExplorationController()
-  : costmap_2d_ros_(new costmap_2d::Costmap2DROS("global_costmap", tfl_)),
-    planner_(new hector_exploration_planner::HectorExplorationPlanner())
+namespace stage_frontier_datagen
 {
-  ros::NodeHandle nh;
-
-  planner_->initialize("hector_exploration_planner",costmap_2d_ros_.get());
+SimpleExplorationController::SimpleExplorationController()
+  : planner_(new hector_exploration_planner::HectorExplorationPlanner()),
+    is_planner_initialized_(false),
+    is_planner_running_(false)
+{
   path_follower_.initialize(&tfl_);
 
-  exploration_plan_generation_timer_ = nh.createTimer(ros::Duration(15.0), &SimpleExplorationController::timerPlanExploration, this, false );
-  cmd_vel_generator_timer_ = nh.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration, this, false );
+  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(15.0),
+                                                      &SimpleExplorationController::timerPlanExploration, this, false);
+  cmd_vel_generator_timer_ = nh_.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration,
+                                            this, false);
 
-  vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 10);
-  exploration_plan_pub_ = nh.advertise<nav_msgs::Path>("exploration_path",2);
+  vel_pub_ = nh_.advertise<geometry_msgs::Twist>("cmd_vel", 10);
+  exploration_plan_pub_ = nh_.advertise<nav_msgs::Path>("exploration_path", 2);
 }
 
-bool SimpleExplorationController::getNavPath(nav_msgs::Path &path)
+void SimpleExplorationController::startExploration()
 {
-  ROS_INFO("Planner called");
+  if (!costmap_2d_ros_)
+  {
+    costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+    planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
+    is_planner_initialized_ = true;
+  }
+
+  exploration_plan_generation_timer_.start();
+  cmd_vel_generator_timer_.start();
+}
+
+void SimpleExplorationController::stopExploration()
+{
+  exploration_plan_generation_timer_.stop();
+  cmd_vel_generator_timer_.stop();
+  vel_pub_.publish(geometry_msgs::Twist());
+}
+
+bool SimpleExplorationController::getNavPath()
+{
+  if (!is_planner_initialized_)
+  {
+    ROS_WARN_THROTTLE(1, "Planner not initialized");
+    return false;
+  }
+
+  if (is_planner_running_)
+  {
+    return false;
+  }
 
   tf::Stamped<tf::Pose> robot_pose_tf;
-  costmap_2d_ros_->getRobotPose(robot_pose_tf);
+  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
+  if (!robot_pose_status || robot_pose_tf.getRotation().length2() < 1e-5)
+  {
+    ROS_ERROR("Failed to get robot pose from costmap");
+    return false;
+  }
 
   geometry_msgs::PoseStamped pose;
   tf::poseStampedTFToMsg(robot_pose_tf, pose);
-  planner_->doExploration(pose, path.poses);
-  path.header.frame_id = "map";
-  path.header.stamp = ros::Time::now();
 
-  if (exploration_plan_pub_.getNumSubscribers() > 0)
+  tf::Quaternion orientation;
+  tf::quaternionMsgToTF(pose.pose.orientation, orientation);
+  if (orientation.length2() < 1e-5)
   {
-    exploration_plan_pub_.publish(path);
+    ROS_ERROR("poseStampedTFToMsg incorrect");
   }
+
+  auto planner_thread = boost::thread([this, pose]() {
+    nav_msgs::Path path;
+    is_planner_running_ = true;
+    ROS_INFO("running planner...");
+    bool status = planner_->doExploration(pose, path.poses);
+    is_planner_running_ = false;
+
+    if (status)
+    {
+      updatePath(path);
+      ROS_INFO("Generated exploration path with %u poses", (unsigned int) path.poses.size());
+      path.header.frame_id = "map";
+      path.header.stamp = ros::Time::now();
+
+      if (exploration_plan_pub_.getNumSubscribers() > 0)
+      {
+        exploration_plan_pub_.publish(path);
+      }
+    }
+    else
+    {
+      ROS_INFO("planner failed");
+    }
+  });
+
+  planner_thread.detach();
 
   return true;
 }
 
-void SimpleExplorationController::timerPlanExploration(const ros::TimerEvent& e)
+void SimpleExplorationController::timerPlanExploration(const ros::TimerEvent &e)
 {
-  nav_msgs::Path path;
+//  while (is_planner_running_)
+//  {
+//    ros::spinOnce();
+//  }
+//
+//  getNavPath();
+}
 
-  if (getNavPath(path))
+void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e)
+{
+  // whether the callback is already running
+  static boost::atomic_bool is_running(false);
+
+  if (is_running)
   {
-    ROS_INFO("Generated exploration path with %u poses", (unsigned int)path.poses.size());
-    path_follower_.setPlan(path.poses);
-  }else{
-    ROS_WARN("Planner failed");
+    return;
   }
+
+  geometry_msgs::Twist twist;
+  bool status = path_follower_.computeVelocityCommands(twist);
+
+  if (!status || path_follower_.stopped() || path_follower_.isGoalReached())
+  {
+    is_running = true;
+
+    // empty twist while planning
+    vel_pub_.publish(twist);
+    if (!is_planner_running_)
+    {
+      getNavPath();
+    }
+  }
+  else
+  {
+    vel_pub_.publish(twist);
+  }
+
+  is_running = false;
 }
 
-void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent& e)
+void SimpleExplorationController::updatePath(nav_msgs::Path &path)
 {
-  geometry_msgs::Twist twist;
-  path_follower_.computeVelocityCommands(twist);
-  vel_pub_.publish(twist);
+  boost::mutex::scoped_lock lock(path_mutex_);
+  path_follower_.setPlan(path.poses);
 }
+
+} // namespace stage_frontier_datagen

@@ -5,6 +5,7 @@
 #define PACKAGE_NAME "stage_frontier_datagen"
 #define TMP_FLOORPLAN_BITMAP "/tmp/floorplan.png"
 #define TMP_WORLDFILE "tmp_floorplan.world"
+#define STAGE_LOAD_SLEEP 5
 
 // std includes
 #include <fstream>
@@ -19,13 +20,20 @@
 
 // custom includes
 #include <stage_frontier_datagen/kth_stage_loader.h>
+#include <stage_frontier_datagen/simple_exploration_controller.h>
+
+// boost includes
+#include <boost/shared_ptr.hpp>
+#include <boost/thread.hpp>
 
 using namespace stage_frontier_datagen;
 
 class KTHStageNode
 {
 public:
-  KTHStageNode() : private_nh_("~")
+  KTHStageNode()
+    : private_nh_("~"),
+      exploration_controller_(new SimpleExplorationController())
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
     {
@@ -52,6 +60,37 @@ public:
     return metric_coords;
   }
 
+  void runStageWorld(std::string worldfile)
+  {
+    char buffer[128];
+    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
+    ros::Duration(STAGE_LOAD_SLEEP).sleep();
+    exploration_controller_->startExploration();
+
+    try
+    {
+      while (!feof(pipe))
+      {
+        if (fgets(buffer, 128, pipe) != NULL)
+          std:cout << buffer << std::endl;
+      }
+    }
+    catch (...)
+    {
+      pclose(pipe);
+      ROS_ERROR("stage world died unexpectedly");
+    }
+    pclose(pipe);
+
+//    int status;
+//    status = std::system(
+//      (std::string("rosrun stage_ros stageros ") + worldfile + " __name:=stageros").c_str()
+//    );
+//    status = std::system(
+//      (std::string("rosnode kill /stageros")).c_str()
+//    );
+  }
+
   void run()
   {
     const std::vector<floorplanGraph> &floorplans = kth_stage_loader_.getFloorplans();
@@ -75,7 +114,7 @@ public:
       cv::Mat map = floorplan::GraphFileOperations::saveGraphLayoutToPNG(TMP_FLOORPLAN_BITMAP, floorplan, MAP_RESOLUTION, MAP_SIZE);
 
       // ------------------ debug map start ------------------ //
-      cv::Mat free_points_map = cv::Mat::zeros(map.rows, map.cols, map.type());
+      cv::Mat free_points_map(map.rows, map.cols, map.type(), cv::Scalar(0));
       for (const auto &free_point: free_points)
       {
         free_points_map.at<uint8_t>(free_point) = 255;
@@ -138,20 +177,14 @@ public:
       tmp_worldfile_stream << worldfile_content;
       tmp_worldfile_stream.close();
 
-      int status;
-      status = std::system(
-        (std::string("rosrun stage_ros stageros ") + tmp_worldfile + " __name:=stageros").c_str()
-      );
-      status = std::system(
-        (std::string("rosnode kill /stageros")).c_str()
-      );
+      runStageWorld(tmp_worldfile);
     }
   }
 
 protected:
   ros::NodeHandle private_nh_;
   KTHStageLoader kth_stage_loader_;
-
+  boost::shared_ptr<SimpleExplorationController> exploration_controller_;
   std::string dataset_dir_;
 
 };
@@ -160,6 +193,10 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "kth_stage_node");
   srand(std::time(NULL));
+
+  auto spin_thread = boost::thread(boost::bind(&ros::spin));
+  spin_thread.detach();
+
   KTHStageNode kth_stage_node;
   return 0;
 

@@ -1,0 +1,9 @@
+<launch>
+    <!-- Argument to decide if you want to run the main node separately for debugging -->
+    <arg name="run_main_node" default="false" />
+
+    <param name="use_sim_time" value="true" />
+    <rosparam command="load" file="$(find stage_frontier_datagen)/config/costmap.yaml" ns="kth_stage_node" />
+
+    <node pkg="stage_frontier_datagen" type="kth_stage_node" name="kth_stage_node" if="$(arg run_main_node)"/>
+</launch>
