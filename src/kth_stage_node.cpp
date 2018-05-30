@@ -31,6 +31,11 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
+  void newPlanCallback(const SimpleExplorationController &exploration_controller)
+  {
+    ROS_INFO("Received new plan");
+  }
+
   KTHStageNode()
     : private_nh_("~"),
       exploration_controller_(new SimpleExplorationController())
@@ -40,25 +45,15 @@ public:
       ROS_ERROR("ROSPARAM dataset_dir not set");
       exit(1);
     }
+    last_path_.header.stamp = ros::Time(0);
 
     kth_stage_loader_.loadDirectory(dataset_dir_);
+    exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1));
 
     run();
   }
 
-  static Point2D convertMapCoordsToMeters(Point2D map_coords, cv::Size map_size, double map_resolution)
-  {
-    Point2D map_centroid(
-      (map_size.width) / 2.0,
-      (map_size.height) / 2.0
-    );
 
-    Point2D metric_coords = (map_coords - map_centroid) * map_resolution;
-    // the map coordinates frame is different than stage
-    metric_coords.y = -metric_coords.y;
-
-    return metric_coords;
-  }
 
   void runStageWorld(std::string worldfile)
   {
@@ -181,11 +176,27 @@ public:
     }
   }
 
+  static Point2D convertMapCoordsToMeters(Point2D map_coords, cv::Size map_size, double map_resolution)
+  {
+    Point2D map_centroid(
+      (map_size.width) / 2.0,
+      (map_size.height) / 2.0
+    );
+
+    Point2D metric_coords = (map_coords - map_centroid) * map_resolution;
+    // the map coordinates frame is different than stage
+    metric_coords.y = -metric_coords.y;
+
+    return metric_coords;
+  }
+
 protected:
   ros::NodeHandle private_nh_;
   KTHStageLoader kth_stage_loader_;
   boost::shared_ptr<SimpleExplorationController> exploration_controller_;
   std::string dataset_dir_;
+
+  nav_msgs::Path last_path_;
 
 };
 

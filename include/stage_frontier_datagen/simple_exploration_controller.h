@@ -24,7 +24,7 @@ public:
    * @brief runs hector_navigation_planner methods to get navigation path based on exploration transform optimization
    * @return status
    */
-  bool getNavPath();
+  bool updatePlan();
 
   /**
    * @brief timer callback function to run planner
@@ -49,10 +49,25 @@ public:
   void stopExploration();
 
   /**
-   * @brief updates path for the path follower
+   * @brief updates path for the path follower (thread-safe)
    * @param path the path to update
    */
   void updatePath(nav_msgs::Path &path);
+
+  /**
+   *
+   * @return a copy of current navigation path (thread-safe)
+   */
+  nav_msgs::Path getCurrentPath();
+
+  /**
+   *
+   * @param callback callback function to call when new plan received
+   */
+  void subscribeNewPlan(boost::function<void(const SimpleExplorationController&)> callback)
+  {
+    plan_update_callback_ = callback;
+  }
 
 
 protected:
@@ -62,6 +77,7 @@ protected:
 
   boost::mutex path_mutex_;
   boost::atomic_bool is_planner_running_;
+  boost::function<void(const SimpleExplorationController&)> plan_update_callback_;  ///< callback on plan update
 
   ros::Publisher vel_pub_;
   ros::Publisher exploration_plan_pub_;
@@ -70,6 +86,8 @@ protected:
 
   ros::Timer exploration_plan_generation_timer_;
   ros::Timer cmd_vel_generator_timer_;
+
+  nav_msgs::Path current_path_;
 
   bool is_planner_initialized_;
 };

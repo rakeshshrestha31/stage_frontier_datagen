@@ -31,18 +31,20 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //=================================================================================================
 
+// TODO: make this proper parameter
 #include <stage_frontier_datagen/simple_exploration_controller.h>
 
 namespace stage_frontier_datagen
 {
 SimpleExplorationController::SimpleExplorationController()
   : planner_(new hector_exploration_planner::HectorExplorationPlanner()),
+    plan_update_callback_(0),
     is_planner_initialized_(false),
     is_planner_running_(false)
 {
   path_follower_.initialize(&tfl_);
 
-  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(15.0),
+  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(3.0),
                                                       &SimpleExplorationController::timerPlanExploration, this, false);
   cmd_vel_generator_timer_ = nh_.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration,
                                             this, false);
@@ -71,7 +73,7 @@ void SimpleExplorationController::stopExploration()
   vel_pub_.publish(geometry_msgs::Twist());
 }
 
-bool SimpleExplorationController::getNavPath()
+bool SimpleExplorationController::updatePlan()
 {
   if (!is_planner_initialized_)
   {
@@ -112,13 +114,18 @@ bool SimpleExplorationController::getNavPath()
     if (status)
     {
       updatePath(path);
-      ROS_INFO("Generated exploration path with %u poses", (unsigned int) path.poses.size());
-      path.header.frame_id = "map";
-      path.header.stamp = ros::Time::now();
+      ROS_INFO("Generated exploration current_path_ with %u poses", (unsigned int) current_path_.poses.size());
+      current_path_.header.frame_id = "map";
+      current_path_.header.stamp = ros::Time::now();
+
+      if (plan_update_callback_)
+      {
+        plan_update_callback_(*this);
+      }
 
       if (exploration_plan_pub_.getNumSubscribers() > 0)
       {
-        exploration_plan_pub_.publish(path);
+        exploration_plan_pub_.publish(current_path_);
       }
     }
     else
@@ -134,12 +141,10 @@ bool SimpleExplorationController::getNavPath()
 
 void SimpleExplorationController::timerPlanExploration(const ros::TimerEvent &e)
 {
-//  while (is_planner_running_)
-//  {
-//    ros::spinOnce();
-//  }
-//
-//  getNavPath();
+  if (!is_planner_running_)
+  {
+    updatePlan();
+  }
 }
 
 void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e)
@@ -163,7 +168,7 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
     vel_pub_.publish(twist);
     if (!is_planner_running_)
     {
-      getNavPath();
+      updatePlan();
     }
   }
   else
@@ -177,7 +182,14 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
 void SimpleExplorationController::updatePath(nav_msgs::Path &path)
 {
   boost::mutex::scoped_lock lock(path_mutex_);
+  current_path_ = path;
   path_follower_.setPlan(path.poses);
+}
+
+nav_msgs::Path SimpleExplorationController::getCurrentPath()
+{
+  boost::mutex::scoped_lock lock(path_mutex_);
+  return current_path_;
 }
 
 } // namespace stage_frontier_datagen
