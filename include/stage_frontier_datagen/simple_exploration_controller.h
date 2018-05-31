@@ -60,6 +60,14 @@ public:
    */
   nav_msgs::Path getCurrentPath();
 
+
+  /**
+   *
+   * @param resolution of the map
+   * @return current map
+   */
+  cv::Mat getCurrentMap(double resolution);
+
   /**
    *
    * @param callback callback function to call when new plan received
@@ -74,6 +82,12 @@ public:
    * @return whether planner is running
    */
   bool isPlannerRunning() { return (bool)is_planner_running_; }
+
+  /**
+   *
+   * @return costmap being used for planning
+   */
+  const boost::shared_ptr<costmap_2d::Costmap2DROS> getCostmap() const { return costmap_2d_ros_; }
 
 protected:
   boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;

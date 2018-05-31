@@ -60,11 +60,16 @@ void SimpleExplorationController::startExploration()
   {
     costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
     planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
-    is_planner_initialized_ = true;
   }
+  else
+  {
+    costmap_2d_ros_->resetLayers();
+  }
+
 
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();
+  is_planner_initialized_ = true;
 }
 
 void SimpleExplorationController::stopExploration()
@@ -72,6 +77,7 @@ void SimpleExplorationController::stopExploration()
   exploration_plan_generation_timer_.stop();
   cmd_vel_generator_timer_.stop();
   vel_pub_.publish(geometry_msgs::Twist());
+  is_planner_initialized_ = false;
 }
 
 bool SimpleExplorationController::updatePlan()

@@ -2,10 +2,9 @@
 // Created by rakesh on 14/05/18.
 //
 
-#include <hector_exploration_planner/frontier_analysis.h>
+#include <stage_frontier_datagen/frontier_analysis.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-
 
 #include <iostream>
 #include <stack>
@@ -13,12 +12,45 @@
 #include <numeric>
 
 #include <ros/ros.h>
+#include <costmap_2d/static_layer.h>
 
-
-namespace hector_exploration_planner
+namespace stage_frontier_datagen
 {
 namespace frontier_analysis
 {
+
+cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double resolution)
+{
+  cv::Mat map;
+  boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
+  for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
+  {
+    std::string layer_name = layer->getName();
+    ROS_INFO_STREAM("LAYER: " << layer_name);
+
+    if (layer_name.find("static_layer") != std::string::npos)
+    {
+      static_layer = boost::static_pointer_cast<costmap_2d::StaticLayer>(layer);
+    }
+  }
+
+  if (static_layer)
+  {
+    auto raw_costmap = static_layer->getCharMap();
+    cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1, (void*)raw_costmap);
+
+    // the costmap origin starts from bottom left, while opencv matrix origin start at top left
+    cv::flip(raw_costmap_img, map, 0);
+
+    cv::Mat tmp_img;
+//    cv::inRange(map, cv::Scalar(70), cv::Scalar(100), tmp_img);
+//    cv::threshold(map, tmp_img, 10, 255, cv::THRESH_BINARY_INV);
+//    map = tmp_img;
+  }
+
+  std::cout << map << std::endl;
+  return map;
+}
 
 void preprocessFrontierImg(cv::Mat &frontier_img_in, cv::Mat &frontier_img_out)
 {

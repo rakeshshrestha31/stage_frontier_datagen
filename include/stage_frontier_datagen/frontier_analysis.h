@@ -2,8 +2,8 @@
 // Created by rakesh on 14/05/18.
 //
 
-#ifndef HECTOR_NAVIGATION_FRONTIER_ANALYSIS_H
-#define HECTOR_NAVIGATION_FRONTIER_ANALYSIS_H
+#ifndef STAGE_FRONTIER_DATAGEN_FRONTIER_ANALYSIS_H
+#define STAGE_FRONTIER_DATAGEN_FRONTIER_ANALYSIS_H
 
 // preprocessing operations on frontiers
 #define FRONTIER_HOLE_FILLING_KERNEL 1
@@ -11,15 +11,23 @@
 
 #define MIN_FRONTIER_CLUSTER_SIZE 20
 
-#include <costmap_2d/costmap_2d.h>
+#include <costmap_2d/costmap_2d_ros.h>
 #include <opencv2/core/core.hpp>
 
 #include <vector>
 
-namespace hector_exploration_planner
+namespace stage_frontier_datagen
 {
 namespace frontier_analysis
 {
+
+/**
+ *
+ * @param costmap_2d_ros
+ * @param resolution
+ * @return
+ */
+cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double resolution);
 
 /**
  * @brief preprocessing operations (closing (hole filling) and opening)

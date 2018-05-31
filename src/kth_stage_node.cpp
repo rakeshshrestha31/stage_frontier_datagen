@@ -26,6 +26,7 @@
 #include <stage_frontier_datagen/kth_stage_loader.h>
 #include <stage_frontier_datagen/simple_exploration_controller.h>
 #include <stage_frontier_datagen/utils.h>
+#include <stage_frontier_datagen/frontier_analysis.h>
 
 // boost includes
 #include <boost/shared_ptr.hpp>
@@ -43,7 +44,9 @@ public:
 
     if (planner_status)
     {
-
+      auto costmap = exploration_controller.getCostmap();
+      cv::Mat map = frontier_analysis::getMap(costmap, 0.2);
+      cv::imwrite("/tmp/map.png", map);
     }
   }
 
@@ -96,7 +99,7 @@ public:
       int ret;
       do
       {
-        // TODO:
+        // TODO: find a way to read the piped output
         ret = waitpid(roslaunch_process, &status_child, WNOHANG);
       } while (!WIFEXITED(status_child) && planner_status_);
       ROS_INFO("simulation session ended successfully");

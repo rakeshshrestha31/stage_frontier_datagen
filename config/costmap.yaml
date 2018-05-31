@@ -1,15 +1,12 @@
 global_costmap:
 
   map_type: costmap
-  track_unknown_space: true
-  unknown_cost_value: 255
-  obstacle_range: 2.5
-  raytrace_range: 3.0
+
   footprint: [[0.25, 0.21],
               [-0.25, 0.21],
               [-0.25, -0.21],
               [0.25, -0.21]]
-  inflation_radius: 0.1
+
   #transform_tolerance: 0.5
   inscribed_radius: 0.3
   circumscribed_radius: 0.32
@@ -23,3 +20,18 @@ global_costmap:
 
   #Investigate what this actually does
   cost_scaling_factor: 10.0
+
+  # static layer
+  map_topic: map
+  track_unknown_space: true
+  unknown_cost_value: 255
+
+  # obstacle layer
+  observation_sources: base_scan
+  base_scan:
+    - data_type: LaserScan
+  obstacle_range: 2.5
+  raytrace_range: 3.0
+
+  # inflation layer
+  inflation_radius: 0.1
