@@ -37,19 +37,6 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
-  void newPlanCallback(const SimpleExplorationController &exploration_controller, bool planner_status)
-  {
-    ROS_INFO("Received new plan");
-    planner_status_ = planner_status;
-
-    if (planner_status)
-    {
-      auto costmap = exploration_controller.getCostmap();
-      cv::Mat map = frontier_analysis::getMap(costmap, 0.2);
-      cv::imwrite("/tmp/map.png", map);
-    }
-  }
-
   KTHStageNode()
     : private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
@@ -69,7 +56,18 @@ public:
     run();
   }
 
+  void newPlanCallback(const SimpleExplorationController &exploration_controller, bool planner_status)
+  {
+    ROS_INFO("Received new plan");
+    planner_status_ = planner_status;
 
+    if (planner_status)
+    {
+      auto costmap = exploration_controller.getCostmap();
+      cv::Mat map = frontier_analysis::getMap(costmap, 0.2);
+      cv::imwrite("/tmp/map.png", map);
+    }
+  }
 
   void runStageWorld(std::string worldfile)
   {
@@ -143,37 +141,9 @@ public:
       );
 
       cv::Mat map = floorplan::GraphFileOperations::saveGraphLayoutToPNG(TMP_FLOORPLAN_BITMAP, floorplan, MAP_RESOLUTION, MAP_SIZE);
-
-      // ------------------ debug map start ------------------ //
-      cv::Mat free_points_map(map.rows, map.cols, map.type(), cv::Scalar(0));
-      for (const auto &free_point: free_points)
-      {
-        free_points_map.at<uint8_t>(free_point) = 255;
-      }
-
-      std::vector<cv::Mat> channels(3);
-      channels[2] = cv::Scalar(255) - map;
-      channels[1] = free_points_map;
-      channels[0] = cv::Mat::zeros(map.rows, map.cols, map.type());
-
-      cv::Mat rgb_image;
-      cv::merge(channels, rgb_image);
-
-      cv::circle(rgb_image, free_points.at(random_index), 2, cv::Scalar(255, 255, 255), -1);
-
-      std::string floorplan_name = floorplan.m_property->floorname;
-      auto extension_start = floorplan_name.find_last_of('.');
-      if (extension_start != std::string::npos)
-      {
-        floorplan_name = floorplan_name.substr(0, extension_start);
-      }
-
-      std::string img_filename = std::string("/tmp/") + floorplan_name + ".png";
-      cv::imwrite(img_filename, rgb_image);
-      ROS_INFO("wrote map: %s", img_filename.c_str());
-      // ------------------ debug map ends ------------------ //
-
       cv::imwrite(TMP_FLOORPLAN_BITMAP, map);
+
+      writeDebugMap(floorplan, map, free_points, random_index);
 
       // create world file from template
       std::string package_path = ros::package::getPath(PACKAGE_NAME);
@@ -210,6 +180,43 @@ public:
 
       runStageWorld(tmp_worldfile);
     }
+  }
+
+  /**
+   * @brief visualize the point chosen for initialization
+   * @param floorplan
+   * @param map
+   * @param free_points
+   * @param random_index
+   */
+  void writeDebugMap(floorplanGraph floorplan, cv::Mat map, const std::vector<cv::Point> &free_points, size_t random_index)
+  {
+    cv::Mat free_points_map(map.rows, map.cols, map.type(), cv::Scalar(0));
+    for (const auto &free_point: free_points)
+    {
+      free_points_map.at<uint8_t>(free_point) = 255;
+    }
+
+    std::vector<cv::Mat> channels(3);
+    channels[2] = cv::Scalar(255) - map;
+    channels[1] = free_points_map;
+    channels[0] = cv::Mat::zeros(map.rows, map.cols, map.type());
+
+    cv::Mat rgb_image;
+    cv::merge(channels, rgb_image);
+
+    cv::circle(rgb_image, free_points.at(random_index), 2, cv::Scalar(255, 255, 255), -1);
+
+    std::string floorplan_name = floorplan.m_property->floorname;
+    auto extension_start = floorplan_name.find_last_of('.');
+    if (extension_start != std::string::npos)
+    {
+      floorplan_name = floorplan_name.substr(0, extension_start);
+    }
+
+    std::string img_filename = std::string("/tmp/") + floorplan_name + ".png";
+    cv::imwrite(img_filename, rgb_image);
+    ROS_INFO("wrote map: %s", img_filename.c_str());
   }
 
   static Point2D convertMapCoordsToMeters(Point2D map_coords, cv::Size map_size, double map_resolution)

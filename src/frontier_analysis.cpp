@@ -26,8 +26,6 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
   for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
   {
     std::string layer_name = layer->getName();
-    ROS_INFO_STREAM("LAYER: " << layer_name);
-
     if (layer_name.find("static_layer") != std::string::npos)
     {
       static_layer = boost::static_pointer_cast<costmap_2d::StaticLayer>(layer);
@@ -48,7 +46,7 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
 //    map = tmp_img;
   }
 
-  std::cout << map << std::endl;
+//  std::cout << map << std::endl;
   return map;
 }
 
