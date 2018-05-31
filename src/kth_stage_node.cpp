@@ -14,7 +14,7 @@
 #include <ctime>
 #include <cstdlib>
 #include <signal.h>
-
+#include <sys/wait.h>
 
 // ROS includes
 #include <ros/ros.h>
@@ -84,12 +84,19 @@ public:
 
     try
     {
-//      while (!feof(pipe) && planner_status_)
-      while (!read(pipe, buffer, 128) && planner_status_)
+      int status_child;
+      int ret;
+      do
       {
+        ret = waitpid(roslaunch_process, &status_child, WNOHANG);
+      } while (!WIFEXITED(status_child) && planner_status_);
+      ROS_ERROR("simulation session ended successfully");
+
+//      while (!feof(pipe) && planner_status_)
+//      {
 //        if (fgets(buffer, 128, pipe) != NULL)
-          std:cout << buffer << std::endl;
-      }
+//          std:cout << buffer << std::endl;
+//      }
     }
     catch (...)
     {

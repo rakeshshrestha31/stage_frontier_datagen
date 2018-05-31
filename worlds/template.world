@@ -12,6 +12,7 @@ quit_time 3600 # 1 hour of simulated time
 paused 1
 
 resolution 0.02
+threads 4
 
 # configure the GUI window
 window

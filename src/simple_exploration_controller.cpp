@@ -40,7 +40,8 @@ SimpleExplorationController::SimpleExplorationController()
   : planner_(new hector_exploration_planner::HectorExplorationPlanner()),
     plan_update_callback_(0),
     is_planner_initialized_(false),
-    is_planner_running_(false)
+    is_planner_running_(false),
+    planner_status_(true)
 {
   path_follower_.initialize(&tfl_);
 
@@ -108,10 +109,10 @@ bool SimpleExplorationController::updatePlan()
     nav_msgs::Path path;
     is_planner_running_ = true;
     ROS_INFO("running planner...");
-    bool status = planner_->doExploration(pose, path.poses);
+    planner_status_ = planner_->doExploration(pose, path.poses);
     is_planner_running_ = false;
 
-    if (status)
+    if (planner_status_)
     {
       updatePath(path);
       ROS_INFO("Generated exploration current_path_ with %u poses", (unsigned int) current_path_.poses.size());
@@ -130,7 +131,7 @@ bool SimpleExplorationController::updatePlan()
 
     if (plan_update_callback_)
     {
-      plan_update_callback_(*this, status);
+      plan_update_callback_(*this, static_cast<bool>(planner_status_));
     }
   });
 
@@ -160,12 +161,12 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
   geometry_msgs::Twist twist;
   bool status = path_follower_.computeVelocityCommands(twist);
 
-  if (!status || path_follower_.stopped() || path_follower_.isGoalReached())
+  if (!status || path_follower_.stopped() || path_follower_.isGoalReached() || !planner_status_)
   {
     is_running = true;
 
     // empty twist while planning
-    vel_pub_.publish(twist);
+    vel_pub_.publish(geometry_msgs::Twist());
     if (!is_planner_running_)
     {
       updatePlan();

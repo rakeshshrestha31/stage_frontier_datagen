@@ -90,6 +90,7 @@ protected:
   nav_msgs::Path current_path_;
 
   bool is_planner_initialized_;
+  boost::atomic_bool planner_status_;
 };
 } // namespace stage_frontier_datagen
 #endif //STAGE_FRONTIER_DATAGEN_SIMPLE_EXPLORATION_CONTROLLER_H
