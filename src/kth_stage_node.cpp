@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <signal.h>
 #include <sys/wait.h>
+#include <chrono>
+#include <thread>
 
 // ROS includes
 #include <ros/ros.h>
@@ -48,7 +50,8 @@ public:
   KTHStageNode()
     : private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
-      planner_status_(true)
+      planner_status_(true),
+      spin_thread_(&KTHStageNode::spin, this)
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
     {
@@ -73,24 +76,30 @@ public:
       (std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), &pipe
     );
 
-    char buffer[128];
-
 //    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
-    ros::Duration(STAGE_LOAD_SLEEP).sleep();
+    std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
+
+    std::cout << kill(roslaunch_process, 0) << std::endl;
+    if (roslaunch_process <= 0 || kill(roslaunch_process, 0) < 0)
+    {
+      ROS_ERROR("Error launch simulation");
+      return;
+    }
 
     planner_status_ = true;
     exploration_controller_->startExploration();
 
-
     try
     {
+      char buffer[128];
       int status_child;
       int ret;
       do
       {
+        // TODO:
         ret = waitpid(roslaunch_process, &status_child, WNOHANG);
       } while (!WIFEXITED(status_child) && planner_status_);
-      ROS_ERROR("simulation session ended successfully");
+      ROS_INFO("simulation session ended successfully");
 
 //      while (!feof(pipe) && planner_status_)
 //      {
@@ -103,6 +112,9 @@ public:
       ROS_ERROR("stage world died unexpectedly");
       return;
     }
+
+    while (exploration_controller_->isPlannerRunning());
+    exploration_controller_->stopExploration();
 
     kill(roslaunch_process, SIGKILL);
   }
@@ -211,6 +223,18 @@ public:
     return metric_coords;
   }
 
+  void spin()
+  {
+    while (ros::ok())
+    {
+      if (planner_status_)
+      {
+        ros::spinOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    }
+  }
+
 protected:
   ros::NodeHandle private_nh_;
   KTHStageLoader kth_stage_loader_;
@@ -218,6 +242,8 @@ protected:
   std::string dataset_dir_;
 
   nav_msgs::Path last_path_;
+
+  boost::thread spin_thread_;
   boost::atomic_bool planner_status_;
 
 };
@@ -227,8 +253,8 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "kth_stage_node");
   srand(std::time(NULL));
 
-  auto spin_thread = boost::thread(boost::bind(&ros::spin));
-  spin_thread.detach();
+//  auto spin_thread = boost::thread(boost::bind(&ros::spin));
+//  spin_thread.detach();
 
   KTHStageNode kth_stage_node;
   return 0;

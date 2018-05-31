@@ -69,6 +69,11 @@ public:
     plan_update_callback_ = callback;
   }
 
+  /**
+   *
+   * @return whether planner is running
+   */
+  bool isPlannerRunning() { return (bool)is_planner_running_; }
 
 protected:
   boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;
