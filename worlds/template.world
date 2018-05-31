@@ -9,10 +9,12 @@ include "sick.inc"
 # time to pause (in GUI mode) or quit (in headless mode (-g)) the simulation
 quit_time 3600 # 1 hour of simulated time
 
-paused 1
+paused 0
+speedup 2.5
 
 resolution 0.02
 threads 4
+interval_sim 100
 
 # configure the GUI window
 window
