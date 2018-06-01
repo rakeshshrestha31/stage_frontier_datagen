@@ -110,6 +110,12 @@ protected:
 
   bool is_planner_initialized_;
   boost::atomic_bool planner_status_;
+
+  // protected methods
+  /**
+   * clears the costmap (without unsubscribing to the required topics)
+   */
+  void clearCostmap();
 };
 } // namespace stage_frontier_datagen
 #endif //STAGE_FRONTIER_DATAGEN_SIMPLE_EXPLORATION_CONTROLLER_H

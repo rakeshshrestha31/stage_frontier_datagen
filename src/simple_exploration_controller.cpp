@@ -31,8 +31,8 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //=================================================================================================
 
-// TODO: make this proper parameter
 #include <stage_frontier_datagen/simple_exploration_controller.h>
+#include <costmap_2d/costmap_layer.h>
 
 namespace stage_frontier_datagen
 {
@@ -59,13 +59,8 @@ void SimpleExplorationController::startExploration()
   if (!costmap_2d_ros_)
   {
     costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
-    planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
   }
-  else
-  {
-    costmap_2d_ros_->resetLayers();
-  }
-
+  planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
 
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();
@@ -77,7 +72,11 @@ void SimpleExplorationController::stopExploration()
   exploration_plan_generation_timer_.stop();
   cmd_vel_generator_timer_.stop();
   vel_pub_.publish(geometry_msgs::Twist());
+
+  clearCostmap();
+
   is_planner_initialized_ = false;
+
 }
 
 bool SimpleExplorationController::updatePlan()
@@ -199,4 +198,15 @@ nav_msgs::Path SimpleExplorationController::getCurrentPath()
   return current_path_;
 }
 
+void SimpleExplorationController::clearCostmap()
+{
+  if (!costmap_2d_ros_)
+  {
+    ROS_ERROR("SimpleExplorationController: tried to clear non-existant costmap");
+    return;
+  }
+
+  boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros_->getCostmap()->getMutex()));
+  costmap_2d_ros_->resetLayers();
+}
 } // namespace stage_frontier_datagen
