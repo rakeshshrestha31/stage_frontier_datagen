@@ -30,6 +30,37 @@ namespace frontier_analysis
 cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double desired_resolution);
 
 /**
+ *
+ * @param costmap_image image in the resolution/size of costmap (e.g. frontier image)
+ * @param costmap_2d_ros
+ * @param desired_resolution
+ * @return
+ */
+cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
+                                  const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
+                                  double desired_resolution);
+
+/**
+ *
+ * @param costmap_bounding_rect bounding rectangle in the resolution/size of costmap (e.g. frontier ROI)
+ * @param costmap_2d_ros
+ * @param desired_resolution
+ * @return
+ */
+cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
+                                   const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                   double desired_resolution);
+
+/**
+ *
+ * @param world_points points in world (metric) coords
+ * @param costmap_2d_ros
+ * @return points in (cost)map coordinates
+ */
+std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
+                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros);
+
+/**
  * @brief preprocessing operations (closing (hole filling) and opening)
  * @param frontier_img_in input image
  * @param frontier_img_out output image

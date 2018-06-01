@@ -87,7 +87,13 @@ public:
    *
    * @return costmap being used for planning
    */
-  const boost::shared_ptr<costmap_2d::Costmap2DROS> getCostmap() const { return costmap_2d_ros_; }
+  const boost::shared_ptr<costmap_2d::Costmap2DROS> getCostmap2DROS() const { return costmap_2d_ros_; }
+
+  /**
+   *
+   * @return shared pointer to hector planner instance
+   */
+  boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> getPlanner() const { return planner_; }
 
 protected:
   boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;
@@ -110,6 +116,7 @@ protected:
 
   bool is_planner_initialized_;
   boost::atomic_bool planner_status_;
+  boost::atomic_bool is_plan_update_callback_running_;
 
   // protected methods
   /**

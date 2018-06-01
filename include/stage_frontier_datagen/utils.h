@@ -6,6 +6,7 @@
 #define STAGE_FRONTIER_DATAGEN_UTILS_H
 
 #include <unistd.h>
+#include <costmap_2d/costmap_2d_ros.h>
 
 namespace stage_frontier_datagen
 {

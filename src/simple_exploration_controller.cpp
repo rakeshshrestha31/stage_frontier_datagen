@@ -41,6 +41,7 @@ SimpleExplorationController::SimpleExplorationController()
     plan_update_callback_(0),
     is_planner_initialized_(false),
     is_planner_running_(false),
+    is_plan_update_callback_running_(false),
     planner_status_(true)
 {
   path_follower_.initialize(&tfl_);
@@ -134,9 +135,20 @@ bool SimpleExplorationController::updatePlan()
       ROS_INFO("planner failed");
     }
 
+    // make sure that the previous callback finished before going to next
     if (plan_update_callback_)
     {
-      plan_update_callback_(*this, static_cast<bool>(planner_status_));
+      if (!is_plan_update_callback_running_)
+      {
+        is_plan_update_callback_running_ = true;
+        plan_update_callback_(*this, static_cast<bool>(planner_status_));
+        is_plan_update_callback_running_ = false;
+      }
+      else
+      {
+        ROS_WARN("Skipping plan update callback because previous one hasn't finished");
+      }
+
     }
   });
 

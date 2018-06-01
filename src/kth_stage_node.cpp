@@ -32,6 +32,8 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
 
+#include <opencv2/imgproc/imgproc.hpp>
+
 using namespace stage_frontier_datagen;
 
 class KTHStageNode
@@ -63,10 +65,42 @@ public:
 
     if (planner_status)
     {
-      auto costmap = exploration_controller.getCostmap();
-      cv::Mat estimated_map = frontier_analysis::getMap(costmap, MAP_RESOLUTION);
+      auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
+      cv::Mat estimated_map = frontier_analysis::getMap(costmap_2d_ros, MAP_RESOLUTION);
 
-      // clip to get groundtruth portion of the map
+      // TODO: move these processings to frontier_analysis
+      // --------------------------- get frontiers bounding boxes --------------------------- //
+      cv::Mat frontier_bounding_box_image = cv::Mat(
+        current_groundtruth_map_.rows, current_groundtruth_map_.cols, current_groundtruth_map_.type(),
+        cv::Scalar(0)
+      );
+      auto planner = exploration_controller.getPlanner();
+      auto frontier_img = planner->getFrontierImg();
+      auto clustered_frontier_world_points = planner->getClusteredFrontierPoints();
+
+      cv::Mat original_costmap_image = frontier_analysis::getMap(costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution());
+      for (const auto &frontier_world_points: clustered_frontier_world_points)
+      {
+        auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros);
+        cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
+        cv::Rect bounding_box_map = frontier_analysis::resizeToDesiredResolution(
+          bounding_box_costmap,
+          costmap_2d_ros,
+          MAP_RESOLUTION
+        );
+        frontier_bounding_box_image(bounding_box_map) = cv::Scalar(255);
+        original_costmap_image(bounding_box_costmap) = cv::Scalar(127);
+      }
+      cv::imwrite("/tmp/costmap.png", original_costmap_image);
+
+      {
+        // flip vertically cuz the positive y in image is going down
+        cv::Mat tmp_img;
+        cv::flip(frontier_bounding_box_image, tmp_img, 0);
+        frontier_bounding_box_image = tmp_img;
+      }
+
+      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
       auto diff_size_rows = estimated_map.rows - current_groundtruth_map_.rows;
       auto diff_size_cols = estimated_map.cols - current_groundtruth_map_.cols;
       cv::Mat estimated_clipped_map = estimated_map
@@ -74,8 +108,9 @@ public:
         .colRange((int)std::floor(diff_size_cols/2.0), estimated_map.cols - (int)std::ceil(diff_size_cols/2.0));
       assert(estimated_clipped_map.size == current_groundtruth_map_.size);
 
+      // --------------------------- multi-channeled image for visualization --------------------------- //
       std::vector<cv::Mat> channels(3);
-      channels[0] = cv::Mat::zeros(current_groundtruth_map_.rows, current_groundtruth_map_.cols, current_groundtruth_map_.type());
+      channels[0] = frontier_bounding_box_image;
       channels[1] = estimated_clipped_map;
       channels[2] = cv::Scalar(255) - current_groundtruth_map_;
 

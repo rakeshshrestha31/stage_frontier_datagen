@@ -53,15 +53,73 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
 
   if (!map.empty())
   {
-    auto costmap = costmap_2d_ros->getCostmap();
-    auto costmap_resolution = costmap->getResolution();
-    auto resize_factor = costmap_resolution / desired_resolution;
-    cv::Mat resized_map;
-    cv::resize(map, resized_map, cv::Size(), resize_factor, resize_factor);
+    cv::Mat resized_map = resizeToDesiredResolution(map, costmap_2d_ros, desired_resolution);
     map = resized_map;
   }
 
   return map;
+}
+
+cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
+                                  const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
+                                  double desired_resolution)
+{
+  auto costmap = costmap_2d_ros->getCostmap();
+  assert(
+    costmap_image.rows == costmap->getSizeInCellsY()
+    && costmap_image.cols == costmap->getSizeInCellsX()
+  );
+
+  auto costmap_resolution = costmap->getResolution();
+  auto resize_factor = costmap_resolution / desired_resolution;
+  cv::Mat resized_image;
+  cv::resize(costmap_image, resized_image, cv::Size(), resize_factor, resize_factor);
+
+  return resized_image;
+}
+
+cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
+                                   const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                   double desired_resolution)
+{
+  auto costmap = costmap_2d_ros->getCostmap();
+  assert(
+    costmap_bounding_rect.height <= costmap->getSizeInCellsY()
+    && costmap_bounding_rect.width <= costmap->getSizeInCellsX()
+  );
+
+  auto costmap_resolution = costmap->getResolution();
+  auto resize_factor = costmap_resolution / desired_resolution;
+  cv::Rect resized_bounding_rect(
+    (int)(costmap_bounding_rect.x * resize_factor),
+    (int)(costmap_bounding_rect.y * resize_factor),
+    (int)(costmap_bounding_rect.width * resize_factor),
+    (int)(costmap_bounding_rect.height * resize_factor)
+  );
+  return resized_bounding_rect;
+}
+
+std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
+                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros)
+{
+  auto costmap = costmap_2d_ros->getCostmap();
+  auto resolution = costmap->getResolution();
+
+  std::vector<cv::Point> map_points;
+  map_points.reserve(world_points.size());
+
+  auto half_cell_size_x = (int)(costmap->getSizeInCellsX() / 2);
+  auto half_cell_size_y = (int)(costmap->getSizeInCellsY() / 2);
+
+  for (const auto &world_point: world_points)
+  {
+    map_points.emplace_back(cv::Point(
+      (int)(half_cell_size_x + world_point.pose.position.x / resolution),
+      (int)(half_cell_size_y + world_point.pose.position.y / resolution)
+    ));
+  }
+
+  return map_points;
 }
 
 void preprocessFrontierImg(cv::Mat &frontier_img_in, cv::Mat &frontier_img_out)
