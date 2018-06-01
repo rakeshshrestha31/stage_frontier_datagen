@@ -19,7 +19,7 @@ namespace stage_frontier_datagen
 namespace frontier_analysis
 {
 
-cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double resolution)
+cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double desired_resolution)
 {
   cv::Mat map;
   boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
@@ -28,7 +28,8 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
     std::string layer_name = layer->getName();
     if (layer_name.find("static_layer") != std::string::npos)
     {
-      static_layer = boost::static_pointer_cast<costmap_2d::StaticLayer>(layer);
+      static_layer = boost::dynamic_pointer_cast<costmap_2d::StaticLayer>(layer);
+      break;
     }
   }
 
@@ -40,13 +41,26 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
     // the costmap origin starts from bottom left, while opencv matrix origin start at top left
     cv::flip(raw_costmap_img, map, 0);
 
-    cv::Mat tmp_img;
-//    cv::inRange(map, cv::Scalar(70), cv::Scalar(100), tmp_img);
-//    cv::threshold(map, tmp_img, 10, 255, cv::THRESH_BINARY_INV);
+    // only intensity 0 to 100 are valid
+//    cv::Mat validity_mask;
+//    cv::Mat tmp_img;
+//    cv::inRange(map, cv::Scalar(70), cv::Scalar(100), validity_mask);
+    // masking doesn't work
+//    map.copyTo(tmp_img, validity_mask);
 //    map = tmp_img;
+//    map = validity_mask;
   }
 
-//  std::cout << map << std::endl;
+  if (!map.empty())
+  {
+    auto costmap = costmap_2d_ros->getCostmap();
+    auto costmap_resolution = costmap->getResolution();
+    auto resize_factor = costmap_resolution / desired_resolution;
+    cv::Mat resized_map;
+    cv::resize(map, resized_map, cv::Size(), resize_factor, resize_factor);
+    map = resized_map;
+  }
+
   return map;
 }
 

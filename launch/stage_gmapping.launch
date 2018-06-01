@@ -3,8 +3,8 @@
     <arg name="laser_topic" default="base_scan" />
 
     <!-- Map size -->
-    <arg name="xmin" default="-30" />
-    <arg name="xmax" default="30" />
+    <arg name="xmin" default="-35" />
+    <arg name="xmax" default="35" />
 
     <arg name="ymin" default="-20" />
     <arg name="ymax" default="20" />

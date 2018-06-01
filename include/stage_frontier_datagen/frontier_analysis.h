@@ -24,10 +24,10 @@ namespace frontier_analysis
 /**
  *
  * @param costmap_2d_ros
- * @param resolution
+ * @param desired_resolution
  * @return
  */
-cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double resolution);
+cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double desired_resolution);
 
 /**
  * @brief preprocessing operations (closing (hole filling) and opening)

@@ -64,8 +64,24 @@ public:
     if (planner_status)
     {
       auto costmap = exploration_controller.getCostmap();
-      cv::Mat map = frontier_analysis::getMap(costmap, 0.2);
-      cv::imwrite("/tmp/map.png", map);
+      cv::Mat estimated_map = frontier_analysis::getMap(costmap, MAP_RESOLUTION);
+
+      // clip to get groundtruth portion of the map
+      auto diff_size_rows = estimated_map.rows - current_groundtruth_map_.rows;
+      auto diff_size_cols = estimated_map.cols - current_groundtruth_map_.cols;
+      cv::Mat estimated_clipped_map = estimated_map
+        .rowRange((int)std::floor(diff_size_rows/2.0), estimated_map.rows - (int)std::ceil(diff_size_rows/2.0))
+        .colRange((int)std::floor(diff_size_cols/2.0), estimated_map.cols - (int)std::ceil(diff_size_cols/2.0));
+      assert(estimated_clipped_map.size == current_groundtruth_map_.size);
+
+      std::vector<cv::Mat> channels(3);
+      channels[0] = cv::Mat::zeros(current_groundtruth_map_.rows, current_groundtruth_map_.cols, current_groundtruth_map_.type());
+      channels[1] = estimated_clipped_map;
+      channels[2] = cv::Scalar(255) - current_groundtruth_map_;
+
+      cv::Mat rgb_image;
+      cv::merge(channels, rgb_image);
+      cv::imwrite("/tmp/map.png", rgb_image);
     }
   }
 
@@ -140,10 +156,10 @@ public:
         MAP_RESOLUTION
       );
 
-      cv::Mat map = floorplan::GraphFileOperations::saveGraphLayoutToPNG(TMP_FLOORPLAN_BITMAP, floorplan, MAP_RESOLUTION, MAP_SIZE);
-      cv::imwrite(TMP_FLOORPLAN_BITMAP, map);
+      current_groundtruth_map_ = floorplan::GraphFileOperations::saveGraphLayoutToPNG(TMP_FLOORPLAN_BITMAP, floorplan, MAP_RESOLUTION, MAP_SIZE);
+      cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
 
-      writeDebugMap(floorplan, map, free_points, random_index);
+      writeDebugMap(floorplan, current_groundtruth_map_, free_points, random_index);
 
       // create world file from template
       std::string package_path = ros::package::getPath(PACKAGE_NAME);
@@ -252,6 +268,7 @@ protected:
   std::string dataset_dir_;
 
   nav_msgs::Path last_path_;
+  cv::Mat current_groundtruth_map_;
 
   boost::thread spin_thread_;
   boost::atomic_bool planner_status_;
