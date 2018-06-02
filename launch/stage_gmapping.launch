@@ -8,7 +8,7 @@
 
     <arg name="ymin" default="-20" />
     <arg name="ymax" default="20" />
-    <arg name="max_laser_range" default="6" />
+    <arg name="max_laser_range" default="8" />
 
     <param name="/use_sim_time" value="true" />
 

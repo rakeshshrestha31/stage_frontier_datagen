@@ -90,9 +90,12 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
 
   auto costmap_resolution = costmap->getResolution();
   auto resize_factor = costmap_resolution / desired_resolution;
+
+  unsigned int costmap_half_width = costmap->getSizeInCellsX() / 2;
+  unsigned int costmap_half_height = costmap->getSizeInCellsY() / 2;
   cv::Rect resized_bounding_rect(
-    (int)(costmap_bounding_rect.x * resize_factor),
-    (int)(costmap_bounding_rect.y * resize_factor),
+    (int)((costmap_bounding_rect.x - costmap_half_width) * resize_factor),
+    (int)((costmap_bounding_rect.y - costmap_half_height) * resize_factor),
     (int)(costmap_bounding_rect.width * resize_factor),
     (int)(costmap_bounding_rect.height * resize_factor)
   );
@@ -103,19 +106,18 @@ std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::P
                                               const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros)
 {
   auto costmap = costmap_2d_ros->getCostmap();
-  auto resolution = costmap->getResolution();
 
   std::vector<cv::Point> map_points;
   map_points.reserve(world_points.size());
 
-  auto half_cell_size_x = (int)(costmap->getSizeInCellsX() / 2);
-  auto half_cell_size_y = (int)(costmap->getSizeInCellsY() / 2);
-
   for (const auto &world_point: world_points)
   {
+    unsigned int map_x;
+    unsigned int map_y;
+    // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
+    costmap->worldToMap(world_point.pose.position.x, -world_point.pose.position.y, map_x, map_y);
     map_points.emplace_back(cv::Point(
-      (int)(half_cell_size_x + world_point.pose.position.x / resolution),
-      (int)(half_cell_size_y + world_point.pose.position.y / resolution)
+      map_x, map_y
     ));
   }
 

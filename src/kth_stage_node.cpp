@@ -78,7 +78,13 @@ public:
       auto frontier_img = planner->getFrontierImg();
       auto clustered_frontier_world_points = planner->getClusteredFrontierPoints();
 
-      cv::Mat original_costmap_image = frontier_analysis::getMap(costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution());
+      cv::Mat original_costmap_image = frontier_analysis::getMap(
+        costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution()
+      );
+      cv::Mat frontier_costmap_image(
+        original_costmap_image.rows, original_costmap_image.cols, original_costmap_image.type(), cv::Scalar(0)
+      );
+
       for (const auto &frontier_world_points: clustered_frontier_world_points)
       {
         auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros);
@@ -89,15 +95,14 @@ public:
           MAP_RESOLUTION
         );
         frontier_bounding_box_image(bounding_box_map) = cv::Scalar(255);
-        original_costmap_image(bounding_box_costmap) = cv::Scalar(127);
+        frontier_costmap_image(bounding_box_costmap) = cv::Scalar(255);
       }
-      cv::imwrite("/tmp/costmap.png", original_costmap_image);
 
       {
         // flip vertically cuz the positive y in image is going down
         cv::Mat tmp_img;
         cv::flip(frontier_bounding_box_image, tmp_img, 0);
-        frontier_bounding_box_image = tmp_img;
+        frontier_bounding_box_image = tmp_img.clone();
       }
 
       // --------------------------- clip to get groundtruth portion of the map --------------------------- //
@@ -111,12 +116,19 @@ public:
       // --------------------------- multi-channeled image for visualization --------------------------- //
       std::vector<cv::Mat> channels(3);
       channels[0] = frontier_bounding_box_image;
-      channels[1] = estimated_clipped_map;
+      channels[1] = cv::Scalar(255) - estimated_clipped_map;
       channels[2] = cv::Scalar(255) - current_groundtruth_map_;
 
       cv::Mat rgb_image;
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/map.png", rgb_image);
+
+      channels[0] = cv::Mat(original_costmap_image.rows, original_costmap_image.cols, original_costmap_image.type(), cv::Scalar(0));
+      channels[1] = cv::Scalar(255) - original_costmap_image;
+      channels[2] = frontier_costmap_image;
+      cv::merge(channels, rgb_image);
+      cv::imwrite("/tmp/costmap.png", rgb_image);
+
     }
   }
 
