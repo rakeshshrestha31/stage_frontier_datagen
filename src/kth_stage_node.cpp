@@ -66,68 +66,63 @@ public:
     if (planner_status)
     {
       auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
-      cv::Mat estimated_map = frontier_analysis::getMap(costmap_2d_ros, MAP_RESOLUTION);
-
       // TODO: move these processings to frontier_analysis
       // --------------------------- get frontiers bounding boxes --------------------------- //
-      cv::Mat frontier_bounding_box_image = cv::Mat(
-        current_groundtruth_map_.rows, current_groundtruth_map_.cols, current_groundtruth_map_.type(),
-        cv::Scalar(0)
-      );
+
       auto planner = exploration_controller.getPlanner();
       auto frontier_img = planner->getFrontierImg();
       auto clustered_frontier_world_points = planner->getClusteredFrontierPoints();
 
-      cv::Mat original_costmap_image = frontier_analysis::getMap(
+      cv::Mat costmap_image = frontier_analysis::getMap(
         costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution()
       );
-      cv::Mat frontier_costmap_image(
-        original_costmap_image.rows, original_costmap_image.cols, original_costmap_image.type(), cv::Scalar(0)
+      cv::Mat frontier_bounding_box_image(
+        costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0)
       );
 
       for (const auto &frontier_world_points: clustered_frontier_world_points)
       {
         auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros);
         cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
-        cv::Rect bounding_box_map = frontier_analysis::resizeToDesiredResolution(
-          bounding_box_costmap,
-          costmap_2d_ros,
-          MAP_RESOLUTION
-        );
-        frontier_bounding_box_image(bounding_box_map) = cv::Scalar(255);
-        frontier_costmap_image(bounding_box_costmap) = cv::Scalar(255);
+        frontier_bounding_box_image(bounding_box_costmap) = cv::Scalar(255);
       }
-
-      {
-        // flip vertically cuz the positive y in image is going down
-        cv::Mat tmp_img;
-        cv::flip(frontier_bounding_box_image, tmp_img, 0);
-        frontier_bounding_box_image = tmp_img.clone();
-      }
-
-      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
-      auto diff_size_rows = estimated_map.rows - current_groundtruth_map_.rows;
-      auto diff_size_cols = estimated_map.cols - current_groundtruth_map_.cols;
-      cv::Mat estimated_clipped_map = estimated_map
-        .rowRange((int)std::floor(diff_size_rows/2.0), estimated_map.rows - (int)std::ceil(diff_size_rows/2.0))
-        .colRange((int)std::floor(diff_size_cols/2.0), estimated_map.cols - (int)std::ceil(diff_size_cols/2.0));
-      assert(estimated_clipped_map.size == current_groundtruth_map_.size);
 
       // --------------------------- multi-channeled image for visualization --------------------------- //
       std::vector<cv::Mat> channels(3);
-      channels[0] = frontier_bounding_box_image;
-      channels[1] = cv::Scalar(255) - estimated_clipped_map;
-      channels[2] = cv::Scalar(255) - current_groundtruth_map_;
-
       cv::Mat rgb_image;
-      cv::merge(channels, rgb_image);
-      cv::imwrite("/tmp/map.png", rgb_image);
 
-      channels[0] = cv::Mat(original_costmap_image.rows, original_costmap_image.cols, original_costmap_image.type(), cv::Scalar(0));
-      channels[1] = cv::Scalar(255) - original_costmap_image;
-      channels[2] = frontier_costmap_image;
+      channels[0] = cv::Mat(costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0));
+      channels[1] = cv::Scalar(255) - costmap_image;
+      channels[2] = frontier_bounding_box_image;
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/costmap.png", rgb_image);
+
+      // resize to desired resolution
+      auto resized_costmap_image = frontier_analysis::resizeToDesiredResolution(
+        costmap_image, costmap_2d_ros, MAP_RESOLUTION
+      );
+      auto resized_frontier_bounding_box_image = frontier_analysis::resizeToDesiredResolution(
+        frontier_bounding_box_image, costmap_2d_ros, MAP_RESOLUTION
+      );
+
+      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
+      auto diff_size_rows = resized_costmap_image.rows - current_groundtruth_map_.rows;
+      auto diff_size_cols = resized_costmap_image.cols - current_groundtruth_map_.cols;
+      cv::Range row_range((int)std::floor(diff_size_rows/2.0), resized_costmap_image.rows - (int)std::ceil(diff_size_rows/2.0));
+      cv::Range col_range((int)std::floor(diff_size_cols/2.0), resized_costmap_image.cols - (int)std::ceil(diff_size_cols/2.0));
+      cv::Mat resized_clipped_costmap = resized_costmap_image
+        .rowRange(row_range)
+        .colRange(col_range);
+      cv::Mat resized_clipped_frontier_bb_image = resized_frontier_bounding_box_image
+        .rowRange(row_range)
+        .colRange(col_range);
+      assert(estimated_clipped_map.size == current_groundtruth_map_.size);
+
+      channels[0] = cv::Scalar(255) - current_groundtruth_map_;
+      channels[1] = cv::Scalar(255) - resized_clipped_costmap;
+      channels[2] = resized_clipped_frontier_bb_image;
+      cv::merge(channels, rgb_image);
+      cv::imwrite("/tmp/map.png", rgb_image);
 
     }
   }

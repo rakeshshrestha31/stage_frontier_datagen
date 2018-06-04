@@ -22,33 +22,29 @@ namespace frontier_analysis
 cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double desired_resolution)
 {
   cv::Mat map;
-  boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
-  for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
+
   {
-    std::string layer_name = layer->getName();
-    if (layer_name.find("static_layer") != std::string::npos)
+    boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros->getCostmap()->getMutex()));
+    boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
+    for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
     {
-      static_layer = boost::dynamic_pointer_cast<costmap_2d::StaticLayer>(layer);
-      break;
+      std::string layer_name = layer->getName();
+      if (layer_name.find("static_layer") != std::string::npos)
+      {
+        static_layer = boost::dynamic_pointer_cast<costmap_2d::StaticLayer>(layer);
+        break;
+      }
     }
-  }
 
-  if (static_layer)
-  {
-    auto raw_costmap = static_layer->getCharMap();
-    cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1, (void*)raw_costmap);
+    if (static_layer)
+    {
+      auto raw_costmap = static_layer->getCharMap();
+      cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1,
+                              (void *) raw_costmap);
 
-    // the costmap origin starts from bottom left, while opencv matrix origin start at top left
-    cv::flip(raw_costmap_img, map, 0);
-
-    // only intensity 0 to 100 are valid
-//    cv::Mat validity_mask;
-//    cv::Mat tmp_img;
-//    cv::inRange(map, cv::Scalar(70), cv::Scalar(100), validity_mask);
-    // masking doesn't work
-//    map.copyTo(tmp_img, validity_mask);
-//    map = tmp_img;
-//    map = validity_mask;
+      // the costmap origin starts from bottom left, while opencv matrix origin start at top left
+      cv::flip(raw_costmap_img, map, 0);
+    }
   }
 
   if (!map.empty())
@@ -91,11 +87,9 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
   auto costmap_resolution = costmap->getResolution();
   auto resize_factor = costmap_resolution / desired_resolution;
 
-  unsigned int costmap_half_width = costmap->getSizeInCellsX() / 2;
-  unsigned int costmap_half_height = costmap->getSizeInCellsY() / 2;
   cv::Rect resized_bounding_rect(
-    (int)((costmap_bounding_rect.x - costmap_half_width) * resize_factor),
-    (int)((costmap_bounding_rect.y - costmap_half_height) * resize_factor),
+    (int)((costmap_bounding_rect.x) * resize_factor),
+    (int)((costmap_bounding_rect.y) * resize_factor),
     (int)(costmap_bounding_rect.width * resize_factor),
     (int)(costmap_bounding_rect.height * resize_factor)
   );
