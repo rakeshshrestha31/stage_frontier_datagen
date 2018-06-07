@@ -2,8 +2,8 @@
 // Created by rakesh on 14/05/18.
 //
 
-#define MAX_TIME_OFFSET_ESTIMATED_GROUNDTRUTH 0.1
-#define TRANSFORM_TOLERANCE 0.1
+#define MAX_TIME_OFFSET_ESTIMATED_GROUNDTRUTH 0.11
+#define TRANSFORM_TOLERANCE 0.11
 
 #include <stage_frontier_datagen/frontier_analysis.h>
 #include <stage_frontier_datagen/utils.h>
@@ -250,6 +250,8 @@ std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::P
   auto costmap = costmap_2d_ros->getCostmap();
   auto resolution = costmap->getResolution();
 
+  auto cell_size_x = costmap->getSizeInCellsX();
+  auto cell_size_y = costmap->getSizeInCellsY();
 
   std::vector<cv::Point> map_points;
   map_points.reserve(world_points.size());
@@ -268,9 +270,19 @@ std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::P
     map_y = static_cast<unsigned int>(-groundtruth_position_vector.getY() / resolution + costmap->getSizeInCellsY() / 2);
 
 //    costmap->worldToMap(groundtruth_position_vector.getX(), -groundtruth_position_vector.getY(), map_x, map_y);
-    map_points.emplace_back(cv::Point(
-      map_x, map_y
-    ));
+
+    if
+      (
+      map_x >= 0
+      && map_x < cell_size_x
+      && map_y >= 0
+      && map_y < cell_size_y
+      )
+    {
+      map_points.emplace_back(
+        map_x, map_y
+      );
+    }
   }
 
   return map_points;
