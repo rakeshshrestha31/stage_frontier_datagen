@@ -2,7 +2,12 @@
 // Created by rakesh on 14/05/18.
 //
 
+#define MAX_TIME_OFFSET_ESTIMATED_GROUNDTRUTH 0.1
+#define TRANSFORM_TOLERANCE 0.1
+
 #include <stage_frontier_datagen/frontier_analysis.h>
+#include <stage_frontier_datagen/utils.h>
+
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -10,16 +15,22 @@
 #include <stack>
 #include <map>
 #include <numeric>
+#include <cmath>
 
 #include <ros/ros.h>
 #include <costmap_2d/static_layer.h>
+#include <nav_msgs/Odometry.h>
+#include <tf/tf.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 
 namespace stage_frontier_datagen
 {
 namespace frontier_analysis
 {
 
-cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double desired_resolution)
+cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros, double desired_resolution,
+               const tf::Transform &transform_gt_est)
 {
   cv::Mat map;
 
@@ -39,8 +50,20 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
     if (static_layer)
     {
       auto raw_costmap = static_layer->getCharMap();
+      auto resolution = static_layer->getResolution();
+
       cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1,
                               (void *) raw_costmap);
+
+      // center at (0, 0) of the map
+      auto centering_affine_transformation = getMapCenteringAffineTransformation(static_layer);
+      cv::warpAffine(raw_costmap_img, map, centering_affine_transformation, cv::Size(raw_costmap_img.cols, raw_costmap_img.rows));
+      raw_costmap_img = map.clone();
+
+      // rotate and translate to fit groundtruth
+      auto gt_alignment_affine_transformation = getMapGroundtruthAffineTransformation(static_layer, transform_gt_est);
+      cv::warpAffine(raw_costmap_img, map, gt_alignment_affine_transformation, cv::Size(raw_costmap_img.cols, raw_costmap_img.rows));
+      raw_costmap_img = map.clone();
 
       // the costmap origin starts from bottom left, while opencv matrix origin start at top left
       cv::flip(raw_costmap_img, map, 0);
@@ -54,6 +77,130 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
   }
 
   return map;
+}
+
+tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                               const nav_msgs::Odometry &odometry)
+{
+  auto robot_groundtruth_pose = utils::odometryMsgToTfStampedPose(odometry);
+
+  tf::Stamped<tf::Pose> robot_estimated_pose;
+//  costmap_2d_ros->getRobotPose(robot_estimated_pose);
+  if (!getRobotPose(costmap_2d_ros, robot_estimated_pose.frame_id_, robot_estimated_pose))
+  {
+    ROS_ERROR_THROTTLE(1.0, "Robot pose not availabe");
+    return tf::Transform::getIdentity();
+  }
+
+  // time offset between estimated pose and groundtruth pose
+  auto time_offset = robot_estimated_pose.stamp_.toSec() - robot_groundtruth_pose.stamp_.toSec();
+  if (time_offset > MAX_TIME_OFFSET_ESTIMATED_GROUNDTRUTH)
+  {
+    ROS_WARN_THROTTLE(1.0, "time offset between estimated and groundtruth pose is %f secs", time_offset);
+  }
+
+  auto transform_gt_est = robot_groundtruth_pose * robot_estimated_pose.inverse();
+  ROS_INFO_THROTTLE(
+    1.0, "offset: (%f, %f), %f",
+    transform_gt_est.getOrigin().getX(), transform_gt_est.getOrigin().getY(),
+    tf::getYaw(transform_gt_est.getRotation()) * 180 / M_PI
+  );
+
+  // TODO: fix this (the groundtruth pose from stage is funny, not synchronized!!!)
+  return tf::Transform::getIdentity();
+
+  // find transformation between estimated and groundtruth
+  return transform_gt_est;
+}
+
+cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap)
+{
+  auto resolution = static_costmap->getResolution();
+
+  auto costmap_origin_map_x = static_costmap->getOriginX() / resolution;
+  auto costmap_origin_map_y = static_costmap->getOriginY() / resolution;
+
+  auto groundtruth_origin_map_x = -static_costmap->getSizeInMetersX() / 2 / resolution;
+  auto groundtruth_origin_map_y = -static_costmap->getSizeInMetersY() / 2 / resolution;
+
+  auto translation_x = static_cast<int>(costmap_origin_map_x - groundtruth_origin_map_x);
+  auto translation_y = static_cast<int>(costmap_origin_map_y - groundtruth_origin_map_y);
+
+  // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
+  return (cv::Mat_<double>(2, 3) <<   1.0, 0.0, translation_x,
+                                      0.0, 1.0, -translation_y);
+}
+
+cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap,
+                                              const tf::Transform &transform_gt_est)
+{
+  auto resolution = static_costmap->getResolution();
+
+  auto translation_tf_vector = transform_gt_est.getOrigin();
+  auto translation_x = translation_tf_vector.getX() / resolution;
+  auto translation_y = translation_tf_vector.getY() / resolution;
+
+  auto rotation_angle = tf::getYaw(transform_gt_est.getRotation());
+  auto cos_rotation = std::cos(rotation_angle);
+  auto sin_rotation = std::sin(rotation_angle);
+
+  // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
+  return (cv::Mat_<double>(2, 3) <<   cos_rotation, -sin_rotation, translation_x,
+                                      sin_rotation, cos_rotation, -translation_y);
+}
+
+bool transformPose(tf::Stamped<tf::Pose> source_pose,
+                   std::string target_frame_id,
+                   tf::Stamped<tf::Pose> &target_pose)
+{
+  static tf::TransformListener tf_listener;
+  try
+  {
+    tf_listener.transformPose(target_frame_id, source_pose, target_pose);
+  }
+  catch (tf::LookupException &ex)
+  {
+    ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
+    return false;
+  }
+  catch (tf::ConnectivityException &ex)
+  {
+    ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
+    return false;
+  }
+  catch (tf::ExtrapolationException &ex)
+  {
+    ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
+    return false;
+  }
+  return true;
+}
+
+bool getRobotPose(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                  std::string target_frame_id,
+                  tf::Stamped<tf::Pose> &global_pose)
+{
+
+  global_pose.setIdentity();
+  global_pose.frame_id_ = target_frame_id;
+
+  tf::Stamped < tf::Pose > robot_local_pose;
+  robot_local_pose.setIdentity();
+  robot_local_pose.frame_id_ = costmap_2d_ros->getBaseFrameID();
+  robot_local_pose.stamp_ = ros::Time();
+  ros::Time current_time = ros::Time::now();
+
+  transformPose(robot_local_pose, costmap_2d_ros->getGlobalFrameID(), global_pose);
+  // check global_pose timeout
+  if (current_time.toSec() - global_pose.stamp_.toSec() > TRANSFORM_TOLERANCE)
+  {
+    ROS_WARN_THROTTLE(1.0,
+                      "Costmap2DROS transform timeout. Current time: %.4f, global_pose stamp: %.4f, tolerance: %.4f",
+                      current_time.toSec(), global_pose.stamp_.toSec(), TRANSFORM_TOLERANCE);
+    return false;
+  }
+
+  return true;
 }
 
 cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
@@ -97,9 +244,12 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
 }
 
 std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
-                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros)
+                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                              const tf::Transform &transform_gt_est)
 {
   auto costmap = costmap_2d_ros->getCostmap();
+  auto resolution = costmap->getResolution();
+
 
   std::vector<cv::Point> map_points;
   map_points.reserve(world_points.size());
@@ -108,8 +258,16 @@ std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::P
   {
     unsigned int map_x;
     unsigned int map_y;
+
+    tf::Vector3 estimated_position_vector(
+      world_point.pose.position.x, world_point.pose.position.y, world_point.pose.position.z
+    );
+    auto groundtruth_position_vector = transform_gt_est * estimated_position_vector;
+    map_x = static_cast<unsigned int>(groundtruth_position_vector.getX() / resolution + costmap->getSizeInCellsX() / 2);
     // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
-    costmap->worldToMap(world_point.pose.position.x, -world_point.pose.position.y, map_x, map_y);
+    map_y = static_cast<unsigned int>(-groundtruth_position_vector.getY() / resolution + costmap->getSizeInCellsY() / 2);
+
+//    costmap->worldToMap(groundtruth_position_vector.getX(), -groundtruth_position_vector.getY(), map_x, map_y);
     map_points.emplace_back(cv::Point(
       map_x, map_y
     ));

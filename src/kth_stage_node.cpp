@@ -21,6 +21,7 @@
 // ROS includes
 #include <ros/ros.h>
 #include <ros/package.h>
+#include <nav_msgs/Odometry.h>
 
 // custom includes
 #include <stage_frontier_datagen/kth_stage_loader.h>
@@ -55,9 +56,35 @@ public:
     kth_stage_loader_.loadDirectory(dataset_dir_);
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
+    groundtruth_odom_subscriber_ = private_nh_.subscribe("/base_pose_ground_truth", 5, &KTHStageNode::groundtruthOdomCallback, this);
     run();
   }
 
+  /**
+   * @brief callback for groundtruth pose
+   * @param groundtruth_odom_msg
+   */
+  void groundtruthOdomCallback(const nav_msgs::OdometryConstPtr &groundtruth_odom_msg)
+  {
+    boost::mutex::scoped_lock lock(groundtruth_odom_mutex_);
+    groundtruth_odom_ = *groundtruth_odom_msg;
+  }
+
+  /**
+   * @brief thread-safe get method for groundtruth_odom_ member. We call this method rather that accessing the member directly
+   * @return groundtruth pose
+   */
+  nav_msgs::Odometry getGroundtruthOdom()
+  {
+    boost::mutex::scoped_lock lock(groundtruth_odom_mutex_);
+    return groundtruth_odom_;
+  }
+
+  /**
+   * @brief callback function for new plan from exploration_controller_ member
+   * @param exploration_controller reference to the SimpleExploration object that called this callback function
+   * @param planner_status status of the planner
+   */
   void newPlanCallback(const SimpleExplorationController &exploration_controller, bool planner_status)
   {
     ROS_INFO("Received new plan");
@@ -73,8 +100,11 @@ public:
       auto frontier_img = planner->getFrontierImg();
       auto clustered_frontier_world_points = planner->getClusteredFrontierPoints();
 
+      auto groundtruth_odom = getGroundtruthOdom();
+      auto transform_gt_est = frontier_analysis::getTransformGroundtruthEstimated(costmap_2d_ros, groundtruth_odom);
+
       cv::Mat costmap_image = frontier_analysis::getMap(
-        costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution()
+        costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution(), transform_gt_est
       );
       cv::Mat frontier_bounding_box_image(
         costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0)
@@ -82,7 +112,7 @@ public:
 
       for (const auto &frontier_world_points: clustered_frontier_world_points)
       {
-        auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros);
+        auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros, transform_gt_est);
         cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
         frontier_bounding_box_image(bounding_box_costmap) = cv::Scalar(255);
       }
@@ -127,6 +157,10 @@ public:
     }
   }
 
+  /**
+   * @brief run the stage with SLAM
+   * @param worldfile world file for stage
+   */
   void runStageWorld(std::string worldfile)
   {
     int pipe;
@@ -178,6 +212,9 @@ public:
     kill(roslaunch_process, SIGKILL);
   }
 
+  /**
+   * @brief iterate over all the floorplans and run simulations over them
+   */
   void run()
   {
     const std::vector<floorplanGraph> &floorplans = kth_stage_loader_.getFloorplans();
@@ -277,6 +314,28 @@ public:
     ROS_INFO("wrote map: %s", img_filename.c_str());
   }
 
+  /**
+   * @brief function for ros spin (to be called as a thread). Stops spinning when planner isn't ready to avoid costmap updates
+   */
+  void spin()
+  {
+    while (ros::ok())
+    {
+      if (planner_status_)
+      {
+        ros::spinOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    }
+  }
+
+  /**
+   *
+   * @param map_coords
+   * @param map_size
+   * @param map_resolution
+   * @return
+   */
   static Point2D convertMapCoordsToMeters(Point2D map_coords, cv::Size map_size, double map_resolution)
   {
     Point2D map_centroid(
@@ -291,17 +350,6 @@ public:
     return metric_coords;
   }
 
-  void spin()
-  {
-    while (ros::ok())
-    {
-      if (planner_status_)
-      {
-        ros::spinOnce();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      }
-    }
-  }
 
 protected:
   ros::NodeHandle private_nh_;
@@ -311,6 +359,10 @@ protected:
 
   nav_msgs::Path last_path_;
   cv::Mat current_groundtruth_map_;
+
+  nav_msgs::Odometry groundtruth_odom_;
+  boost::mutex groundtruth_odom_mutex_;
+  ros::Subscriber groundtruth_odom_subscriber_;
 
   boost::thread spin_thread_;
   boost::atomic_bool planner_status_;

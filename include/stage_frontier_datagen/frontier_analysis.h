@@ -12,6 +12,8 @@
 #define MIN_FRONTIER_CLUSTER_SIZE 20
 
 #include <costmap_2d/costmap_2d_ros.h>
+#include <costmap_2d/static_layer.h>
+#include <nav_msgs/Odometry.h>
 #include <opencv2/core/core.hpp>
 
 #include <vector>
@@ -27,7 +29,56 @@ namespace frontier_analysis
  * @param desired_resolution
  * @return
  */
-cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros, double desired_resolution);
+cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros, double desired_resolution,
+               const tf::Transform &transform_gt_est);
+
+/**
+ *
+ * @param costmap_2d_ros
+ * @param odometry
+ * @return transform from estimated coordinates to groundtruth coordinates
+ */
+tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                               const nav_msgs::Odometry &odometry);
+
+/**
+ * @brief affine transformation to center the image to (0, 0) in world (metric) frame
+ * @param static_costmap static costmap
+ * @return affine transformation
+ */
+cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap);
+
+
+/**
+ * @brief affine transformation to align estimated map with groundtruth
+ * @param static_costmap static costmap
+ * @param transform_gt_est transform from estimated map coordinates to groundtruth (in meters)
+ * @return affine transformation
+ */
+cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap,
+                                              const tf::Transform &transform_gt_est);
+
+
+/**
+ * @brief Based on costmap_2d_ros getRobotPose method
+ * @param source_pose
+ * @param target_frame_id
+ * @param target_pose
+ * @return if the pose query was successful
+ */
+bool transformPose(tf::Stamped<tf::Pose> source_pose,
+                  std::string target_frame_id,
+                  tf::Stamped<tf::Pose> &target_pose);
+/**
+ * @brief get robot pose in specific frame_id.
+ * @param costmap_2d_ros
+ * @param frame_id frame id of pose
+ * @param global_pose output pose
+ * @return if the pose query was successful
+ */
+bool getRobotPose(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                  std::string target_frame_id,
+                  tf::Stamped<tf::Pose> &global_pose);
 
 /**
  *
@@ -55,10 +106,12 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
  *
  * @param world_points points in world (metric) coords
  * @param costmap_2d_ros
+ * @param transform_gt_est transform from estimated coords to groundtruth coords
  * @return points in (cost)map coordinates
  */
 std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
-                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros);
+                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                              const tf::Transform &transform_gt_est);
 
 /**
  * @brief preprocessing operations (closing (hole filling) and opening)
