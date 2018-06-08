@@ -5,6 +5,8 @@
 #define MAX_TIME_OFFSET_ESTIMATED_GROUNDTRUTH 0.11
 #define TRANSFORM_TOLERANCE 0.11
 
+#include <numeric>
+
 #include <stage_frontier_datagen/frontier_analysis.h>
 #include <stage_frontier_datagen/utils.h>
 
@@ -76,7 +78,15 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
     map = resized_map;
   }
 
+  map = thresholdCostmap(map);
   return map;
+}
+
+cv::Mat thresholdCostmap(const cv::Mat &original_map)
+{
+  cv::Mat thresholded_map(original_map.size(), original_map.type(), cv::Scalar(0));
+  cv::threshold(original_map, thresholded_map, 10, 255, cv::THRESH_BINARY_INV);
+  return thresholded_map;
 }
 
 cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
@@ -104,15 +114,42 @@ cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &c
 
 cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size groundtruth_size)
 {
+  cv::Mat resized_clipped_map;
+
   auto diff_size_rows = original_map.rows - groundtruth_size.height;
   auto diff_size_cols = original_map.cols - groundtruth_size.width;
-  cv::Range row_range((int)std::floor(diff_size_rows/2.0), original_map.rows - (int)std::ceil(diff_size_rows/2.0));
-  cv::Range col_range((int)std::floor(diff_size_cols/2.0), original_map.cols - (int)std::ceil(diff_size_cols/2.0));
 
-  cv::Mat resized_clipped_map = original_map
-    .rowRange(row_range)
-    .colRange(col_range);
-  assert(resized_clipped_map.size == groundtruth_size);
+
+  if (diff_size_rows > 0)
+  {
+    cv::Range row_range((int)std::floor(diff_size_rows/2.0), original_map.rows - (int)std::ceil(diff_size_rows/2.0));
+    resized_clipped_map = original_map.rowRange(row_range).clone();
+  }
+  else if (diff_size_rows < 0)
+  {
+    auto border_top = (int)std::floor(-diff_size_rows/2.0);
+    auto border_bottom = (int)std::ceil(-diff_size_rows/2.0);
+    cv::copyMakeBorder(original_map, resized_clipped_map, border_top, border_bottom, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
+  }
+  else
+  {
+    resized_clipped_map = original_map.clone();
+  }
+
+  if (diff_size_cols > 0)
+  {
+    cv::Range col_range((int)std::floor(diff_size_cols/2.0), original_map.cols - (int)std::ceil(diff_size_cols/2.0));
+    resized_clipped_map = resized_clipped_map.colRange(col_range).clone();
+  }
+  else if (diff_size_cols < 0)
+  {
+    auto border_left = (int)std::floor(-diff_size_cols/2.0);
+    auto border_right = (int)std::ceil(-diff_size_cols/2.0);
+    cv::Mat tmp_img = resized_clipped_map.clone();
+    cv::copyMakeBorder(tmp_img, resized_clipped_map, 0, 0, border_left, border_right, cv::BORDER_CONSTANT, cv::Scalar(0));
+  }
+
+  assert(resized_clipped_map.size() == groundtruth_size);
 
   return resized_clipped_map;
 }
@@ -161,8 +198,8 @@ cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::
   auto groundtruth_origin_map_x = -static_costmap->getSizeInMetersX() / 2 / resolution;
   auto groundtruth_origin_map_y = -static_costmap->getSizeInMetersY() / 2 / resolution;
 
-  auto translation_x = static_cast<int>(costmap_origin_map_x - groundtruth_origin_map_x);
-  auto translation_y = static_cast<int>(costmap_origin_map_y - groundtruth_origin_map_y);
+  auto translation_x = std::round(costmap_origin_map_x - groundtruth_origin_map_x);
+  auto translation_y = std::round(costmap_origin_map_y - groundtruth_origin_map_y);
 
   // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
   return (cv::Mat_<double>(2, 3) <<   1.0, 0.0, translation_x,

@@ -54,6 +54,13 @@ cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size gro
 
 /**
  *
+ * @param original_map the original map with probabilities between 0 to 100 and -1 for invalid
+ * @return map with only free space colored with max intensity
+ */
+cv::Mat thresholdCostmap(const cv::Mat &original_map);
+
+/**
+ *
  * @param costmap_2d_ros
  * @param odometry
  * @return transform from estimated coordinates to groundtruth coordinates

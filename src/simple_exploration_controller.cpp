@@ -60,8 +60,8 @@ void SimpleExplorationController::startExploration()
   if (!costmap_2d_ros_)
   {
     costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+    planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
   }
-  planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
 
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();

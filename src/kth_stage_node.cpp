@@ -5,6 +5,9 @@
 #define PACKAGE_NAME "stage_frontier_datagen"
 #define TMP_FLOORPLAN_BITMAP "/tmp/floorplan.png"
 
+// number of meters to increase on either limit of map size (to accommodate mapping errors)
+#define MAP_SIZE_CLEARANCE 2
+
 #define STAGE_LOAD_SLEEP 5
 
 // std includes
@@ -105,6 +108,8 @@ public:
         costmap_2d_ros, clustered_frontier_poses, transform_gt_est
       );
 
+      cv::imwrite("/tmp/original.png", costmap_image);
+
       // resize to desired resolution
       auto resized_costmap_image = frontier_analysis::resizeToDesiredResolution(
         costmap_image, costmap_2d_ros, MAP_RESOLUTION
@@ -118,7 +123,7 @@ public:
       cv::Mat rgb_image;
 
       channels[0] = cv::Mat(costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0));
-      channels[1] = cv::Scalar(255) - costmap_image;
+      channels[1] = costmap_image;
       channels[2] = frontier_bounding_box_image;
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/costmap.png", rgb_image);
@@ -133,7 +138,7 @@ public:
       );
 
       channels[0] = cv::Scalar(255) - current_groundtruth_map_;
-      channels[1] = cv::Scalar(255) - resized_clipped_costmap;
+      channels[1] = resized_clipped_costmap;
       channels[2] = resized_clipped_frontier_bb_image;
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/map.png", rgb_image);
@@ -145,12 +150,24 @@ public:
    * @brief run the stage with SLAM
    * @param worldfile world file for stage
    */
-  void runStageWorld(std::string worldfile)
+  void runStageWorld(const std::string &worldfile, const floorplanGraph &floorplan)
   {
     int pipe;
+    auto metric_ratio = floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
+    auto metric_width = (floorplan.m_property->maxx - floorplan.m_property->minx) * metric_ratio;
+    auto metric_height = (floorplan.m_property->maxy - floorplan.m_property->miny) * metric_ratio;
+    auto half_width = metric_width / 2;
+    auto half_height = metric_height / 2;
 
+    std::string command = std::string("roslaunch stage_frontier_datagen stage_gmapping.launch")
+                          + " world_file:=" + worldfile
+                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
+                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
+                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
+                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
+    ROS_INFO("Command: %s", command.c_str());
     auto roslaunch_process = utils::popen2(
-      (std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), &pipe
+        command.c_str(), &pipe
     );
 
 //    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
@@ -232,7 +249,7 @@ public:
       std::string tmp_worldfile_name = kth_stage_loader_.createWorldFile(
         floorplan, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
-      runStageWorld(tmp_worldfile_name);
+      runStageWorld(tmp_worldfile_name, floorplan);
     }
   }
 
