@@ -32,6 +32,26 @@ namespace frontier_analysis
 cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros, double desired_resolution,
                const tf::Transform &transform_gt_est);
 
+
+/**
+ *
+ * @param costmap_2d_ros
+ * @param clustered_frontier_poses
+ * @param transform_gt_est
+ * @return
+ */
+cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                            const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses,
+                            const tf::Transform &transform_gt_est);
+
+/**
+ * @brief clip and resize the original map to fit groundtruth
+ * @param original_map
+ * @param groundtruth_size
+ * @return
+ */
+cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size groundtruth_size);
+
 /**
  *
  * @param costmap_2d_ros

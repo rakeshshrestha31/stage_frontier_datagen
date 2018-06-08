@@ -4,16 +4,14 @@
 
 #define PACKAGE_NAME "stage_frontier_datagen"
 #define TMP_FLOORPLAN_BITMAP "/tmp/floorplan.png"
-#define TMP_WORLDFILE "tmp_floorplan.world"
+
 #define STAGE_LOAD_SLEEP 5
 
 // std includes
-#include <fstream>
-#include <regex>
 #include <random>
 #include <ctime>
 #include <cstdlib>
-#include <signal.h>
+#include <csignal>
 #include <sys/wait.h>
 #include <chrono>
 #include <thread>
@@ -93,29 +91,27 @@ public:
     if (planner_status)
     {
       auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
-      // TODO: move these processings to frontier_analysis
-      // --------------------------- get frontiers bounding boxes --------------------------- //
-
       auto planner = exploration_controller.getPlanner();
       auto frontier_img = planner->getFrontierImg();
-      auto clustered_frontier_world_points = planner->getClusteredFrontierPoints();
+      auto clustered_frontier_poses = planner->getClusteredFrontierPoints();
 
       auto groundtruth_odom = getGroundtruthOdom();
       auto transform_gt_est = frontier_analysis::getTransformGroundtruthEstimated(costmap_2d_ros, groundtruth_odom);
 
-      cv::Mat costmap_image = frontier_analysis::getMap(
+      auto costmap_image = frontier_analysis::getMap(
         costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution(), transform_gt_est
       );
-      cv::Mat frontier_bounding_box_image(
-        costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0)
+      auto frontier_bounding_box_image = frontier_analysis::getBoundingBoxImage(
+        costmap_2d_ros, clustered_frontier_poses, transform_gt_est
       );
 
-      for (const auto &frontier_world_points: clustered_frontier_world_points)
-      {
-        auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros, transform_gt_est);
-        cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
-        frontier_bounding_box_image(bounding_box_costmap) = cv::Scalar(255);
-      }
+      // resize to desired resolution
+      auto resized_costmap_image = frontier_analysis::resizeToDesiredResolution(
+        costmap_image, costmap_2d_ros, MAP_RESOLUTION
+      );
+      auto resized_frontier_bounding_box_image = frontier_analysis::resizeToDesiredResolution(
+        frontier_bounding_box_image, costmap_2d_ros, MAP_RESOLUTION
+      );
 
       // --------------------------- multi-channeled image for visualization --------------------------- //
       std::vector<cv::Mat> channels(3);
@@ -127,26 +123,14 @@ public:
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/costmap.png", rgb_image);
 
-      // resize to desired resolution
-      auto resized_costmap_image = frontier_analysis::resizeToDesiredResolution(
-        costmap_image, costmap_2d_ros, MAP_RESOLUTION
-      );
-      auto resized_frontier_bounding_box_image = frontier_analysis::resizeToDesiredResolution(
-        frontier_bounding_box_image, costmap_2d_ros, MAP_RESOLUTION
+      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
+      cv::Mat resized_clipped_costmap = frontier_analysis::convertToGroundtruthSize(
+        resized_costmap_image, current_groundtruth_map_.size()
       );
 
-      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
-      auto diff_size_rows = resized_costmap_image.rows - current_groundtruth_map_.rows;
-      auto diff_size_cols = resized_costmap_image.cols - current_groundtruth_map_.cols;
-      cv::Range row_range((int)std::floor(diff_size_rows/2.0), resized_costmap_image.rows - (int)std::ceil(diff_size_rows/2.0));
-      cv::Range col_range((int)std::floor(diff_size_cols/2.0), resized_costmap_image.cols - (int)std::ceil(diff_size_cols/2.0));
-      cv::Mat resized_clipped_costmap = resized_costmap_image
-        .rowRange(row_range)
-        .colRange(col_range);
-      cv::Mat resized_clipped_frontier_bb_image = resized_frontier_bounding_box_image
-        .rowRange(row_range)
-        .colRange(col_range);
-      assert(estimated_clipped_map.size == current_groundtruth_map_.size);
+      cv::Mat resized_clipped_frontier_bb_image = frontier_analysis::convertToGroundtruthSize(
+        resized_frontier_bounding_box_image, current_groundtruth_map_.size()
+      );
 
       channels[0] = cv::Scalar(255) - current_groundtruth_map_;
       channels[1] = cv::Scalar(255) - resized_clipped_costmap;
@@ -217,6 +201,8 @@ public:
    */
   void run()
   {
+    std::string package_name = ros::package::getPath(PACKAGE_NAME);
+
     const std::vector<floorplanGraph> &floorplans = kth_stage_loader_.getFloorplans();
     for (const auto &floorplan: floorplans)
     {
@@ -225,6 +211,7 @@ public:
       {
         continue;
       }
+
       size_t random_index = std::rand() % free_points.size();
       Point2D random_point_meters = convertMapCoordsToMeters(
         Point2D(
@@ -240,40 +227,12 @@ public:
 
       writeDebugMap(floorplan, current_groundtruth_map_, free_points, random_index);
 
-      // create world file from template
-      std::string package_path = ros::package::getPath(PACKAGE_NAME);
-      std::string worldfile_template = package_path + "/worlds/template.world";
 
-      std::ifstream file_stream(worldfile_template);
-      std::string worldfile_content((std::istreambuf_iterator<char>(file_stream)),
-                                    std::istreambuf_iterator<char>());
-
-      worldfile_content = std::regex_replace(worldfile_content, std::regex("@bitmap_image@"), TMP_FLOORPLAN_BITMAP);
-      worldfile_content = std::regex_replace(
-        worldfile_content, std::regex("@size@"),
-        std::to_string(
-          (floorplan.m_property->maxx - floorplan.m_property->minx) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
-        )
-        + " "
-        + std::to_string(
-          (floorplan.m_property->maxy - floorplan.m_property->miny) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
-        )
+      std::string worldfile_directory = package_name + "/worlds/";
+      std::string tmp_worldfile_name = kth_stage_loader_.createWorldFile(
+        floorplan, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
-
-      worldfile_content = std::regex_replace(
-        worldfile_content, std::regex("@start_pose@"),
-        std::to_string(random_point_meters.x) + " "
-        + std::to_string(random_point_meters.y) + " "
-        + "0 " + // z coord
-        std::to_string(rand() % 360) // orientation (degree)
-      );
-
-      std::string tmp_worldfile = std::string(package_path) + "/worlds/" + TMP_WORLDFILE;
-      std::ofstream tmp_worldfile_stream(tmp_worldfile);
-      tmp_worldfile_stream << worldfile_content;
-      tmp_worldfile_stream.close();
-
-      runStageWorld(tmp_worldfile);
+      runStageWorld(tmp_worldfile_name);
     }
   }
 

@@ -2,6 +2,10 @@
 // Created by rakesh on 28/05/18.
 //
 
+#define TMP_WORLDFILE "tmp_floorplan.world"
+
+#include <fstream>
+#include <regex>
 
 #include <stage_frontier_datagen/kth_stage_loader.h>
 
@@ -30,7 +34,7 @@ int KTHStageLoader::loadDirectory(std::string dataset_dir)
     }
   }
 
-  return floorplan_graphs_.size() > 0;
+  return !floorplan_graphs.empty();
 }
 
 std::vector<cv::Point> KTHStageLoader::getUnobstructedPoints(const floorplanGraph &graph)
@@ -86,4 +90,42 @@ std::vector<cv::Point> KTHStageLoader::getUnobstructedPoints(const floorplanGrap
   }
 
   return unobstructed_points;
+}
+
+std::string
+KTHStageLoader::createWorldFile(const floorplanGraph &floorplan, const Point2D &robot_position,
+                                const std::string &base_path, const std::string &bitmap_name)
+{
+  std::string worldfile_template = base_path + "/template.world";
+
+  std::ifstream file_stream(worldfile_template);
+  std::string worldfile_content((std::istreambuf_iterator<char>(file_stream)),
+                                std::istreambuf_iterator<char>());
+
+  worldfile_content = std::regex_replace(worldfile_content, std::regex("@bitmap_image@"), bitmap_name);
+  worldfile_content = std::regex_replace(
+    worldfile_content, std::regex("@size@"),
+    std::to_string(
+      (floorplan.m_property->maxx - floorplan.m_property->minx) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
+    )
+    + " "
+    + std::to_string(
+      (floorplan.m_property->maxy - floorplan.m_property->miny) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
+    )
+  );
+
+  worldfile_content = std::regex_replace(
+    worldfile_content, std::regex("@start_pose@"),
+    std::to_string(robot_position.x) + " "
+    + std::to_string(robot_position.y) + " "
+    + "0 " + // z coord
+    std::to_string(rand() % 360) // orientation (degree)
+  );
+
+  std::string tmp_worldfile_name = std::string(base_path) + "/" + TMP_WORLDFILE;
+  std::ofstream tmp_worldfile_stream(tmp_worldfile_name);
+  tmp_worldfile_stream << worldfile_content;
+  tmp_worldfile_stream.close();
+
+  return tmp_worldfile_name;
 }

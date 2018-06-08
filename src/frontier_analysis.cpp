@@ -79,6 +79,44 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
   return map;
 }
 
+cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                            const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses,
+                            const tf::Transform &transform_gt_est)
+{
+  auto costmap = costmap_2d_ros->getCostmap();
+
+  auto size_x = costmap->getSizeInCellsX();
+  auto size_y = costmap->getSizeInCellsY();
+
+  cv::Mat frontier_bounding_box_image(
+    size_y, size_x, CV_8UC1, cv::Scalar(0)
+  );
+
+  for (const auto &frontier_world_points: clustered_frontier_poses)
+  {
+    auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros, transform_gt_est);
+    cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
+    frontier_bounding_box_image(bounding_box_costmap) = cv::Scalar(255);
+  }
+
+  return frontier_bounding_box_image;
+}
+
+cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size groundtruth_size)
+{
+  auto diff_size_rows = original_map.rows - groundtruth_size.height;
+  auto diff_size_cols = original_map.cols - groundtruth_size.width;
+  cv::Range row_range((int)std::floor(diff_size_rows/2.0), original_map.rows - (int)std::ceil(diff_size_rows/2.0));
+  cv::Range col_range((int)std::floor(diff_size_cols/2.0), original_map.cols - (int)std::ceil(diff_size_cols/2.0));
+
+  cv::Mat resized_clipped_map = original_map
+    .rowRange(row_range)
+    .colRange(col_range);
+  assert(resized_clipped_map.size == groundtruth_size);
+
+  return resized_clipped_map;
+}
+
 tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
                                                const nav_msgs::Odometry &odometry)
 {
