@@ -8,11 +8,13 @@
 
     <node name="cartographer_node" pkg="cartographer_ros"
           type="cartographer_node" args="
-          -configuration_directory $(find stage_frontier_datagen)/config
-          -configuration_basename cartographer.lua"
+            -configuration_directory $(find stage_frontier_datagen)/config
+            -configuration_basename cartographer.lua"
           output="screen">
         <remap from="scan" to="$(arg laser_topic)" />
     </node>
+
+    <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros" type="cartographer_occupancy_grid_node" />
 
     <node pkg="hector_driving_aid_markers" type="hector_driving_aid_markers_node" name="hector_driving_aid_markers" output="screen">
         <param name="left_side_y_outer" value="0.205"/>
