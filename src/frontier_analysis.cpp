@@ -93,10 +93,16 @@ cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &c
                             const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses,
                             const tf::Transform &transform_gt_est)
 {
-  auto costmap = costmap_2d_ros->getCostmap();
+  costmap_2d::Costmap2D* costmap;
+  int size_x;
+  int size_y;
+  {
+    boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros->getCostmap()->getMutex()));
+    costmap = costmap_2d_ros->getCostmap();
 
-  auto size_x = costmap->getSizeInCellsX();
-  auto size_y = costmap->getSizeInCellsY();
+    size_x = costmap->getSizeInCellsX();
+    size_y = costmap->getSizeInCellsY();
+  }
 
   cv::Mat frontier_bounding_box_image(
     size_y, size_x, CV_8UC1, cv::Scalar(0)
@@ -105,8 +111,11 @@ cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &c
   for (const auto &frontier_world_points: clustered_frontier_poses)
   {
     auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros, transform_gt_est);
-    cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
-    frontier_bounding_box_image(bounding_box_costmap) = cv::Scalar(255);
+    if (!frontier_map_points.empty())
+    {
+      cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
+      frontier_bounding_box_image(bounding_box_costmap) = cv::Scalar(255);
+    }
   }
 
   return frontier_bounding_box_image;
