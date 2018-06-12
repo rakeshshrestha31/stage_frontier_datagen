@@ -10,6 +10,8 @@
 
 #define STAGE_LOAD_SLEEP 5
 
+#define PLANNER_FAILURE_TOLERANCE 50
+
 // std includes
 #include <random>
 #include <ctime>
@@ -45,6 +47,7 @@ public:
     : private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
+      planner_failure_count_(0),
       spin_thread_(&KTHStageNode::spin, this)
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
@@ -90,9 +93,9 @@ public:
   {
     ROS_INFO("Received new plan");
     planner_status_ = planner_status;
-
     if (planner_status)
     {
+      planner_failure_count_ = 0;
       auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
       auto planner = exploration_controller.getPlanner();
       auto frontier_img = planner->getFrontierImg();
@@ -107,6 +110,12 @@ public:
       auto frontier_bounding_box_image = frontier_analysis::getBoundingBoxImage(
         costmap_2d_ros, clustered_frontier_poses, transform_gt_est
       );
+
+      if (frontier_bounding_box_image.size() != costmap_image.size())
+      {
+        ROS_ERROR("costmap size changed while generating frontier images!!!");
+        return;
+      }
 
       cv::imwrite("/tmp/original.png", costmap_image);
 
@@ -142,7 +151,10 @@ public:
       channels[2] = resized_clipped_frontier_bb_image;
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/map.png", rgb_image);
-
+    }
+    else
+    {
+      planner_failure_count_++;
     }
   }
 
@@ -165,8 +177,14 @@ public:
 //                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
 //                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
 //                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
-    std::string command = std::string("roslaunch stage_frontier_datagen stage_cartographer.launch")
-                          + " world_file:=" + worldfile;
+        std::string command = std::string("roslaunch stage_frontier_datagen stage_karto.launch")
+                          + " world_file:=" + worldfile
+                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
+                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
+                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
+                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
+//    std::string command = std::string("roslaunch stage_frontier_datagen stage_cartographer.launch")
+//                          + " world_file:=" + worldfile;
 
     ROS_INFO("Command: %s", command.c_str());
     auto roslaunch_process = utils::popen2(
@@ -184,6 +202,7 @@ public:
     }
 
     planner_status_ = true;
+    planner_failure_count_ = 0;
     exploration_controller_->startExploration();
 
     try
@@ -195,7 +214,9 @@ public:
       {
         // TODO: find a way to read the piped output
         ret = waitpid(roslaunch_process, &status_child, WNOHANG);
-      } while (!WIFEXITED(status_child) && planner_status_);
+        // TODO: restore the planner status check and remove the force set true
+//        if (!planner_status_) planner_status_ = true;
+      } while (!WIFEXITED(status_child) && planner_failure_count_ < PLANNER_FAILURE_TOLERANCE);
       ROS_INFO("simulation session ended successfully");
 
 //      while (!feof(pipe) && planner_status_)
@@ -300,7 +321,7 @@ public:
   {
     while (ros::ok())
     {
-      if (planner_status_)
+      if (planner_failure_count_ < PLANNER_FAILURE_TOLERANCE)
       {
         ros::spinOnce();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -345,6 +366,7 @@ protected:
 
   boost::thread spin_thread_;
   boost::atomic_bool planner_status_;
+  size_t planner_failure_count_;
 
 };
 
