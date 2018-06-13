@@ -191,6 +191,7 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
   }
   else
   {
+    // TODO: remove comment
     vel_pub_.publish(twist);
   }
 

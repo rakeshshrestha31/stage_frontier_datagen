@@ -10,7 +10,7 @@
 
 #define STAGE_LOAD_SLEEP 5
 
-#define PLANNER_FAILURE_TOLERANCE 50
+#define PLANNER_FAILURE_TOLERANCE 15
 
 // std includes
 #include <random>
@@ -177,7 +177,13 @@ public:
 //                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
 //                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
 //                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
-        std::string command = std::string("roslaunch stage_frontier_datagen stage_karto.launch")
+//        std::string command = std::string("roslaunch stage_frontier_datagen stage_karto.launch")
+//                          + " world_file:=" + worldfile
+//                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
+//                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
+//                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
+//                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
+    std::string command = std::string("roslaunch stage_frontier_datagen stage_hector.launch")
                           + " world_file:=" + worldfile
                           + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
                           + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
@@ -215,7 +221,7 @@ public:
         // TODO: find a way to read the piped output
         ret = waitpid(roslaunch_process, &status_child, WNOHANG);
         // TODO: restore the planner status check and remove the force set true
-//        if (!planner_status_) planner_status_ = true;
+//        planner_failure_count_ = 0;
       } while (!WIFEXITED(status_child) && planner_failure_count_ < PLANNER_FAILURE_TOLERANCE);
       ROS_INFO("simulation session ended successfully");
 
