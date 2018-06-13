@@ -158,6 +158,7 @@ add_executable(kth_stage_node
   src/kth_stage_loader.cpp
   src/simple_exploration_controller.cpp
   src/frontier_analysis.cpp
+  src/stage_interface.cpp
   src/utils.cpp
 )
 
