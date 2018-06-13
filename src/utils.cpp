@@ -55,5 +55,14 @@ popen2(const char *command, int *outfp, int *infp)
   return pid;
 }
 
+tf::Stamped<tf::Pose> odometryMsgToTfStampedPose(const nav_msgs::Odometry &odometry)
+{
+  tf::Pose groundtruth_tf_pose;
+  tf::poseMsgToTF(odometry.pose.pose, groundtruth_tf_pose);
+  return tf::Stamped<tf::Pose>(
+    groundtruth_tf_pose, odometry.header.stamp, odometry.header.frame_id
+  );
+}
+
 } // namespace utils
 } // namespace stage_frontier_datagen

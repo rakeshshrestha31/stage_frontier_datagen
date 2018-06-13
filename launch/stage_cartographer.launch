@@ -1,31 +1,27 @@
 <launch>
+    <param name="/use_sim_time" value="true" />
+
     <arg name="world_file" default="$(find stage)/worlds/simple.world" />
     <arg name="laser_topic" default="base_scan" />
 
-    <!-- Map size -->
-    <arg name="xmin" default="-35" />
-    <arg name="xmax" default="35" />
-
-    <arg name="ymin" default="-20" />
-    <arg name="ymax" default="20" />
-
-    <arg name="max_laser_range" default="8" />
     <arg name="delta" default="0.05" />
 
-    <param name="/use_sim_time" value="true" />
     <rosparam command="load" file="$(find stage_frontier_datagen)/config/costmap.yaml" ns="kth_stage_node" />
 
     <node pkg="stage_ros" type="stageros" name="stageros" required="true" args="$(arg world_file)" />
 
-    <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="log" required="true">
-        <param name="xmin" value="$(arg xmin)" />
-        <param name="ymin" value="$(arg ymin)" />
-        <param name="xmax" value="$(arg xmax)" />
-        <param name="ymax" value="$(arg ymax)" />
-        <param name="delta" value="$(arg delta)" />
-        <param name="maxUrange" value="$(arg max_laser_range)" />
+    <node name="cartographer_node" pkg="cartographer_ros"
+          type="cartographer_node" args="
+            -configuration_directory $(find stage_frontier_datagen)/config
+            -configuration_basename cartographer.lua"
+          required="true"
+          output="screen">
         <remap from="scan" to="$(arg laser_topic)" />
     </node>
+
+    <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros" type="cartographer_occupancy_grid_node"
+          args="-resolution $(arg delta)"
+          required="true" />
 
     <node pkg="hector_driving_aid_markers" type="hector_driving_aid_markers_node" name="hector_driving_aid_markers" output="screen">
         <param name="left_side_y_outer" value="0.205"/>

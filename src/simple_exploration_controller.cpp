@@ -41,6 +41,7 @@ SimpleExplorationController::SimpleExplorationController()
     plan_update_callback_(0),
     is_planner_initialized_(false),
     is_planner_running_(false),
+    is_plan_update_callback_running_(false),
     planner_status_(true)
 {
   path_follower_.initialize(&tfl_);
@@ -59,8 +60,8 @@ void SimpleExplorationController::startExploration()
   if (!costmap_2d_ros_)
   {
     costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+    planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
   }
-  planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
 
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();
@@ -134,9 +135,20 @@ bool SimpleExplorationController::updatePlan()
       ROS_INFO("planner failed");
     }
 
+    // make sure that the previous callback finished before going to next
     if (plan_update_callback_)
     {
-      plan_update_callback_(*this, static_cast<bool>(planner_status_));
+      if (!is_plan_update_callback_running_)
+      {
+        is_plan_update_callback_running_ = true;
+        plan_update_callback_(*this, static_cast<bool>(planner_status_));
+        is_plan_update_callback_running_ = false;
+      }
+      else
+      {
+        ROS_WARN("Skipping plan update callback because previous one hasn't finished");
+      }
+
     }
   });
 
@@ -179,6 +191,7 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
   }
   else
   {
+    // TODO: remove comment
     vel_pub_.publish(twist);
   }
 

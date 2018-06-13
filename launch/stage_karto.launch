@@ -17,14 +17,10 @@
 
     <node pkg="stage_ros" type="stageros" name="stageros" required="true" args="$(arg world_file)" />
 
-    <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="log" required="true">
-        <param name="xmin" value="$(arg xmin)" />
-        <param name="ymin" value="$(arg ymin)" />
-        <param name="xmax" value="$(arg xmax)" />
-        <param name="ymax" value="$(arg ymax)" />
+    <node pkg="slam_karto" type="slam_karto" name="slam_karto" required="true" output="log">
+        <remap from="scan" to="$(arg laser_topic)"/>
+        <param name="map_update_interval" value="1"/>
         <param name="delta" value="$(arg delta)" />
-        <param name="maxUrange" value="$(arg max_laser_range)" />
-        <remap from="scan" to="$(arg laser_topic)" />
     </node>
 
     <node pkg="hector_driving_aid_markers" type="hector_driving_aid_markers_node" name="hector_driving_aid_markers" output="screen">

@@ -4,16 +4,19 @@
 
 #define PACKAGE_NAME "stage_frontier_datagen"
 #define TMP_FLOORPLAN_BITMAP "/tmp/floorplan.png"
-#define TMP_WORLDFILE "tmp_floorplan.world"
+
+// number of meters to increase on either limit of map size (to accommodate mapping errors)
+#define MAP_SIZE_CLEARANCE 2
+
 #define STAGE_LOAD_SLEEP 5
 
+#define PLANNER_FAILURE_TOLERANCE 15
+
 // std includes
-#include <fstream>
-#include <regex>
 #include <random>
 #include <ctime>
 #include <cstdlib>
-#include <signal.h>
+#include <csignal>
 #include <sys/wait.h>
 #include <chrono>
 #include <thread>
@@ -21,6 +24,7 @@
 // ROS includes
 #include <ros/ros.h>
 #include <ros/package.h>
+#include <nav_msgs/Odometry.h>
 
 // custom includes
 #include <stage_frontier_datagen/kth_stage_loader.h>
@@ -32,6 +36,8 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
 
+#include <opencv2/imgproc/imgproc.hpp>
+
 using namespace stage_frontier_datagen;
 
 class KTHStageNode
@@ -41,6 +47,7 @@ public:
     : private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
+      planner_failure_count_(0),
       spin_thread_(&KTHStageNode::spin, this)
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
@@ -53,44 +60,132 @@ public:
     kth_stage_loader_.loadDirectory(dataset_dir_);
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
+    groundtruth_odom_subscriber_ = private_nh_.subscribe("/base_pose_ground_truth", 5, &KTHStageNode::groundtruthOdomCallback, this);
     run();
   }
 
+  /**
+   * @brief callback for groundtruth pose
+   * @param groundtruth_odom_msg
+   */
+  void groundtruthOdomCallback(const nav_msgs::OdometryConstPtr &groundtruth_odom_msg)
+  {
+    boost::mutex::scoped_lock lock(groundtruth_odom_mutex_);
+    groundtruth_odom_ = *groundtruth_odom_msg;
+  }
+
+  /**
+   * @brief thread-safe get method for groundtruth_odom_ member. We call this method rather that accessing the member directly
+   * @return groundtruth pose
+   */
+  nav_msgs::Odometry getGroundtruthOdom()
+  {
+    boost::mutex::scoped_lock lock(groundtruth_odom_mutex_);
+    return groundtruth_odom_;
+  }
+
+  /**
+   * @brief callback function for new plan from exploration_controller_ member
+   * @param exploration_controller reference to the SimpleExploration object that called this callback function
+   * @param planner_status status of the planner
+   */
   void newPlanCallback(const SimpleExplorationController &exploration_controller, bool planner_status)
   {
     ROS_INFO("Received new plan");
     planner_status_ = planner_status;
-
     if (planner_status)
     {
-      auto costmap = exploration_controller.getCostmap();
-      cv::Mat estimated_map = frontier_analysis::getMap(costmap, MAP_RESOLUTION);
+      planner_failure_count_ = 0;
+      auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
+      auto planner = exploration_controller.getPlanner();
+      auto frontier_img = planner->getFrontierImg();
+      auto clustered_frontier_poses = planner->getClusteredFrontierPoints();
 
-      // clip to get groundtruth portion of the map
-      auto diff_size_rows = estimated_map.rows - current_groundtruth_map_.rows;
-      auto diff_size_cols = estimated_map.cols - current_groundtruth_map_.cols;
-      cv::Mat estimated_clipped_map = estimated_map
-        .rowRange((int)std::floor(diff_size_rows/2.0), estimated_map.rows - (int)std::ceil(diff_size_rows/2.0))
-        .colRange((int)std::floor(diff_size_cols/2.0), estimated_map.cols - (int)std::ceil(diff_size_cols/2.0));
-      assert(estimated_clipped_map.size == current_groundtruth_map_.size);
+      auto groundtruth_odom = getGroundtruthOdom();
+      auto transform_gt_est = frontier_analysis::getTransformGroundtruthEstimated(costmap_2d_ros, groundtruth_odom);
 
+      auto costmap_image = frontier_analysis::getMap(
+        costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution(), transform_gt_est
+      );
+      auto frontier_bounding_box_image = frontier_analysis::getBoundingBoxImage(
+        costmap_2d_ros, clustered_frontier_poses, transform_gt_est
+      );
+
+      if (frontier_bounding_box_image.size() != costmap_image.size())
+      {
+        ROS_ERROR("costmap size changed while generating frontier images!!!");
+        return;
+      }
+
+      cv::imwrite("/tmp/original.png", costmap_image);
+
+      // resize to desired resolution
+      auto resized_costmap_image = frontier_analysis::resizeToDesiredResolution(
+        costmap_image, costmap_2d_ros, MAP_RESOLUTION
+      );
+      auto resized_frontier_bounding_box_image = frontier_analysis::resizeToDesiredResolution(
+        frontier_bounding_box_image, costmap_2d_ros, MAP_RESOLUTION
+      );
+
+      // --------------------------- multi-channeled image for visualization --------------------------- //
       std::vector<cv::Mat> channels(3);
-      channels[0] = cv::Mat::zeros(current_groundtruth_map_.rows, current_groundtruth_map_.cols, current_groundtruth_map_.type());
-      channels[1] = estimated_clipped_map;
-      channels[2] = cv::Scalar(255) - current_groundtruth_map_;
-
       cv::Mat rgb_image;
+
+      channels[0] = cv::Mat(costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0));
+      channels[1] = costmap_image;
+      channels[2] = frontier_bounding_box_image;
+      cv::merge(channels, rgb_image);
+      cv::imwrite("/tmp/costmap.png", rgb_image);
+
+      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
+      cv::Mat resized_clipped_costmap = frontier_analysis::convertToGroundtruthSize(
+        resized_costmap_image, current_groundtruth_map_.size()
+      );
+
+      cv::Mat resized_clipped_frontier_bb_image = frontier_analysis::convertToGroundtruthSize(
+        resized_frontier_bounding_box_image, current_groundtruth_map_.size()
+      );
+
+      channels[0] = cv::Scalar(255) - current_groundtruth_map_;
+      channels[1] = resized_clipped_costmap;
+      channels[2] = resized_clipped_frontier_bb_image;
       cv::merge(channels, rgb_image);
       cv::imwrite("/tmp/map.png", rgb_image);
     }
+    else
+    {
+      planner_failure_count_++;
+    }
   }
 
-  void runStageWorld(std::string worldfile)
+  /**
+   * @brief run the stage with SLAM
+   * @param worldfile world file for stage
+   */
+  void runStageWorld(const std::string &worldfile, const floorplanGraph &floorplan)
   {
     int pipe;
+    auto metric_ratio = floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
+    auto metric_width = (floorplan.m_property->maxx - floorplan.m_property->minx) * metric_ratio;
+    auto metric_height = (floorplan.m_property->maxy - floorplan.m_property->miny) * metric_ratio;
+    auto half_width = metric_width / 2;
+    auto half_height = metric_height / 2;
 
+    std::string launch_file = "stage_gmapping.launch";
+//    std::string launch_file = "stage_karto.launch";
+//    std::string launch_file = "stage_hector.launch";
+//    std::string launch_file = "stage_cartographer.launch";
+
+    std::string command = std::string("roslaunch stage_frontier_datagen ") + launch_file
+                          + " world_file:=" + worldfile
+                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
+                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
+                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
+                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
+
+    ROS_INFO("Command: %s", command.c_str());
     auto roslaunch_process = utils::popen2(
-      (std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), &pipe
+        command.c_str(), &pipe
     );
 
 //    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
@@ -104,6 +199,7 @@ public:
     }
 
     planner_status_ = true;
+    planner_failure_count_ = 0;
     exploration_controller_->startExploration();
 
     try
@@ -115,7 +211,9 @@ public:
       {
         // TODO: find a way to read the piped output
         ret = waitpid(roslaunch_process, &status_child, WNOHANG);
-      } while (!WIFEXITED(status_child) && planner_status_);
+        // TODO: restore the planner status check and remove the force set true
+//        planner_failure_count_ = 0;
+      } while (!WIFEXITED(status_child) && planner_failure_count_ < PLANNER_FAILURE_TOLERANCE);
       ROS_INFO("simulation session ended successfully");
 
 //      while (!feof(pipe) && planner_status_)
@@ -136,8 +234,13 @@ public:
     kill(roslaunch_process, SIGKILL);
   }
 
+  /**
+   * @brief iterate over all the floorplans and run simulations over them
+   */
   void run()
   {
+    std::string package_name = ros::package::getPath(PACKAGE_NAME);
+
     const std::vector<floorplanGraph> &floorplans = kth_stage_loader_.getFloorplans();
     for (const auto &floorplan: floorplans)
     {
@@ -146,6 +249,7 @@ public:
       {
         continue;
       }
+
       size_t random_index = std::rand() % free_points.size();
       Point2D random_point_meters = convertMapCoordsToMeters(
         Point2D(
@@ -161,40 +265,12 @@ public:
 
       writeDebugMap(floorplan, current_groundtruth_map_, free_points, random_index);
 
-      // create world file from template
-      std::string package_path = ros::package::getPath(PACKAGE_NAME);
-      std::string worldfile_template = package_path + "/worlds/template.world";
 
-      std::ifstream file_stream(worldfile_template);
-      std::string worldfile_content((std::istreambuf_iterator<char>(file_stream)),
-                                    std::istreambuf_iterator<char>());
-
-      worldfile_content = std::regex_replace(worldfile_content, std::regex("@bitmap_image@"), TMP_FLOORPLAN_BITMAP);
-      worldfile_content = std::regex_replace(
-        worldfile_content, std::regex("@size@"),
-        std::to_string(
-          (floorplan.m_property->maxx - floorplan.m_property->minx) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
-        )
-        + " "
-        + std::to_string(
-          (floorplan.m_property->maxy - floorplan.m_property->miny) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
-        )
+      std::string worldfile_directory = package_name + "/worlds/";
+      std::string tmp_worldfile_name = kth_stage_loader_.createWorldFile(
+        floorplan, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
-
-      worldfile_content = std::regex_replace(
-        worldfile_content, std::regex("@start_pose@"),
-        std::to_string(random_point_meters.x) + " "
-        + std::to_string(random_point_meters.y) + " "
-        + "0 " + // z coord
-        std::to_string(rand() % 360) // orientation (degree)
-      );
-
-      std::string tmp_worldfile = std::string(package_path) + "/worlds/" + TMP_WORLDFILE;
-      std::ofstream tmp_worldfile_stream(tmp_worldfile);
-      tmp_worldfile_stream << worldfile_content;
-      tmp_worldfile_stream.close();
-
-      runStageWorld(tmp_worldfile);
+      runStageWorld(tmp_worldfile_name, floorplan);
     }
   }
 
@@ -235,6 +311,28 @@ public:
     ROS_INFO("wrote map: %s", img_filename.c_str());
   }
 
+  /**
+   * @brief function for ros spin (to be called as a thread). Stops spinning when planner isn't ready to avoid costmap updates
+   */
+  void spin()
+  {
+    while (ros::ok())
+    {
+      if (planner_failure_count_ < PLANNER_FAILURE_TOLERANCE)
+      {
+        ros::spinOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    }
+  }
+
+  /**
+   *
+   * @param map_coords
+   * @param map_size
+   * @param map_resolution
+   * @return
+   */
   static Point2D convertMapCoordsToMeters(Point2D map_coords, cv::Size map_size, double map_resolution)
   {
     Point2D map_centroid(
@@ -249,17 +347,6 @@ public:
     return metric_coords;
   }
 
-  void spin()
-  {
-    while (ros::ok())
-    {
-      if (planner_status_)
-      {
-        ros::spinOnce();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      }
-    }
-  }
 
 protected:
   ros::NodeHandle private_nh_;
@@ -270,8 +357,13 @@ protected:
   nav_msgs::Path last_path_;
   cv::Mat current_groundtruth_map_;
 
+  nav_msgs::Odometry groundtruth_odom_;
+  boost::mutex groundtruth_odom_mutex_;
+  ros::Subscriber groundtruth_odom_subscriber_;
+
   boost::thread spin_thread_;
   boost::atomic_bool planner_status_;
+  size_t planner_failure_count_;
 
 };
 

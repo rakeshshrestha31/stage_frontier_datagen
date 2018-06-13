@@ -49,6 +49,17 @@ public:
    */
   static std::vector<cv::Point> getUnobstructedPoints(const floorplanGraph &graph);
 
+  /**
+   * @brief create world file from template (replacing keywords starting from @)
+   * @param floorplan floorplan to create worldplan from
+   * @param robot_position position to place robot to
+   * @param base_path directory of worldfile template
+   * @return world filename
+   */
+  static std::string
+  createWorldFile(const floorplanGraph &floorplan, const Point2D &robot_position,
+                  const std::string &base_path, const std::string &bitmap_name);
+
 
 
 protected:

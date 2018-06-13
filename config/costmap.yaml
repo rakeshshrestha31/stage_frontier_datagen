@@ -21,17 +21,22 @@ global_costmap:
   #Investigate what this actually does
   cost_scaling_factor: 10.0
 
-  # static layer
-  map_topic: map
-  track_unknown_space: true
-  unknown_cost_value: 255
+  plugins:
+  - {name: static_layer, type: 'costmap_2d::StaticLayer'}
+#  - {name: obstacle_layer, type: 'costmap_2d::ObstacleLayer'}
+  - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
 
-  # obstacle layer
-  observation_sources: base_scan
-  base_scan:
-    - data_type: LaserScan
-  obstacle_range: 2.5
-  raytrace_range: 3.0
+  static_layer:
+    map_topic: /map
+    track_unknown_space: true
+    unknown_cost_value: 255
 
-  # inflation layer
-  inflation_radius: 0.1
+#  obstacle layer:
+#    observation_sources: base_scan
+#    base_scan:
+#      data_type: LaserScan
+#    obstacle_range: 2.5
+#    raytrace_range: 3.0
+
+  inflation layer:
+    inflation_radius: 0.1
