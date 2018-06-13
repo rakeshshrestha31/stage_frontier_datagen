@@ -35,10 +35,9 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
                const tf::Transform &transform_gt_est)
 {
   cv::Mat map;
-
+  boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
   {
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros->getCostmap()->getMutex()));
-    boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
     for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
     {
       std::string layer_name = layer->getName();
@@ -52,7 +51,6 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
     if (static_layer)
     {
       auto raw_costmap = static_layer->getCharMap();
-      auto resolution = static_layer->getResolution();
 
       cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1,
                               (void *) raw_costmap);
@@ -72,7 +70,8 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
     }
   }
 
-  if (!map.empty())
+  auto costmap_resolution = static_layer->getResolution();
+  if (!map.empty() && std::abs(desired_resolution - costmap_resolution) > 1e-2)
   {
     cv::Mat resized_map = resizeToDesiredResolution(map, costmap_2d_ros, desired_resolution);
     map = resized_map;
@@ -299,7 +298,7 @@ cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
 
   auto costmap_resolution = costmap->getResolution();
   auto resize_factor = costmap_resolution / desired_resolution;
-  cv::Mat resized_image;
+  cv::Mat resized_image(costmap_image.size(), costmap_image.type(), cv::Scalar(0));
   cv::resize(costmap_image, resized_image, cv::Size(), resize_factor, resize_factor);
 
   return resized_image;
