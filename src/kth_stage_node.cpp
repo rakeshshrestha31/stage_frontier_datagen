@@ -171,26 +171,17 @@ public:
     auto half_width = metric_width / 2;
     auto half_height = metric_height / 2;
 
-//    std::string command = std::string("roslaunch stage_frontier_datagen stage_gmapping.launch")
-//                          + " world_file:=" + worldfile
-//                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
-//                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
-//                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
-//                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
-//        std::string command = std::string("roslaunch stage_frontier_datagen stage_karto.launch")
-//                          + " world_file:=" + worldfile
-//                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
-//                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
-//                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
-//                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
-    std::string command = std::string("roslaunch stage_frontier_datagen stage_hector.launch")
+    std::string launch_file = "stage_gmapping.launch";
+//    std::string launch_file = "stage_karto.launch";
+//    std::string launch_file = "stage_hector.launch";
+//    std::string launch_file = "stage_cartographer.launch";
+
+    std::string command = std::string("roslaunch stage_frontier_datagen ") + launch_file
                           + " world_file:=" + worldfile
                           + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
                           + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
                           + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
                           + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
-//    std::string command = std::string("roslaunch stage_frontier_datagen stage_cartographer.launch")
-//                          + " world_file:=" + worldfile;
 
     ROS_INFO("Command: %s", command.c_str());
     auto roslaunch_process = utils::popen2(

@@ -5,7 +5,7 @@ define sicksensor sensor
   range [ 0.0 8.0 ]
 	pose [ 0 0 0.1 0 ]
   fov 270
-  samples 512
+  samples 180 # 512 #
   #samples 90 # still useful but much faster to compute
   color_rgba [ 0 0 1 0.15 ]
 )
