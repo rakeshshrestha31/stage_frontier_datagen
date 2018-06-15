@@ -15,6 +15,14 @@
     <param name="/use_sim_time" value="true" />
     <rosparam command="load" file="$(find stage_frontier_datagen)/config/costmap.yaml" ns="kth_stage_node" />
 
+    <group ns="kth_stage_node/global_costmap/ground_truth_layer">
+        <param name="xmin" value="$(arg xmin)" />
+        <param name="ymin" value="$(arg ymin)" />
+        <param name="xmax" value="$(arg xmax)" />
+        <param name="ymax" value="$(arg ymax)" />
+        <param name="resolution" value="$(arg delta)" />
+    </group>
+
     <node pkg="stage_ros" type="stageros" name="stageros" required="true" args="$(arg world_file)" />
 
     <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="log" required="true">

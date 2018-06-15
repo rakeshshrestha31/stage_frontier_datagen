@@ -25,6 +25,7 @@ global_costmap:
   - {name: static_layer, type: 'costmap_2d::StaticLayer'}
 #  - {name: obstacle_layer, type: 'costmap_2d::ObstacleLayer'}
   - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
+  - {name: ground_truth_layer, type: 'ground_truth_layer::GroundTruthLayer'}
 
   static_layer:
     map_topic: /map
@@ -40,3 +41,11 @@ global_costmap:
 
   inflation layer:
     inflation_radius: 0.1
+
+  ground_truth_layer:
+    odom_topic:   odom
+    laser_topic:  base_scan
+    xmin:         -35
+    xmax:         35
+    ymin:         -20
+    ymax:         20
