@@ -13,8 +13,8 @@ global_costmap:
   global_frame: /map
 #  global_frame: /odom
   robot_base_frame: /base_link
-  update_frequency: 0.1 # 0.5
-  publish_frequency: 0.1
+  update_frequency: 10
+  publish_frequency: 1
   static_map: true
   rolling_window: false
 
@@ -23,9 +23,9 @@ global_costmap:
 
   plugins:
 #  - {name: static_layer, type: 'costmap_2d::StaticLayer'}
-  - {name: obstacle_layer, type: 'costmap_2d::ObstacleLayer'}
+#  - {name: obstacle_layer, type: 'costmap_2d::ObstacleLayer'}
   - {name: ground_truth_layer, type: 'ground_truth_layer::GroundTruthLayer'}
-  - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
+#  - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
 
 #
 #  static_layer:
