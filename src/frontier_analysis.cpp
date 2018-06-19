@@ -35,7 +35,7 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
                const tf::Transform &transform_gt_est)
 {
   cv::Mat map;
-  boost::shared_ptr<costmap_2d::StaticLayer> static_layer;
+  boost::shared_ptr<costmap_2d::Costmap2D> static_layer;
   {
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros->getCostmap()->getMutex()));
     for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
@@ -43,14 +43,15 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
       std::string layer_name = layer->getName();
       if (layer_name.find("ground_truth") != std::string::npos)
       {
-        static_layer = boost::dynamic_pointer_cast<costmap_2d::StaticLayer>(layer);
+        static_layer = boost::dynamic_pointer_cast<costmap_2d::Costmap2D>(layer);
         break;
       }
     }
 
     if (static_layer)
     {
-      auto raw_costmap = static_layer->getCharMap();
+//      auto raw_costmap = static_layer->getCharMap();
+      auto raw_costmap = costmap_2d_ros->getCostmap()->getCharMap(); // static_layer->getCharMap();
 
       cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1,
                               (void *) raw_costmap);
@@ -70,14 +71,17 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
     }
   }
 
-  auto costmap_resolution = static_layer->getResolution();
-  if (!map.empty() && std::abs(desired_resolution - costmap_resolution) > 1e-2)
+  if (static_layer)
   {
-    cv::Mat resized_map = resizeToDesiredResolution(map, costmap_2d_ros, desired_resolution);
-    map = resized_map;
-  }
+    auto costmap_resolution = static_layer->getResolution();
+    if (!map.empty() && std::abs(desired_resolution - costmap_resolution) > 1e-2)
+    {
+      cv::Mat resized_map = resizeToDesiredResolution(map, costmap_2d_ros, desired_resolution);
+      map = resized_map;
+    }
 
-  map = thresholdCostmap(map);
+    map = thresholdCostmap(map);
+  }
   return map;
 }
 
@@ -196,7 +200,7 @@ tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2
   return transform_gt_est;
 }
 
-cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap)
+cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::Costmap2D> static_costmap)
 {
   auto resolution = static_costmap->getResolution();
 
@@ -214,7 +218,7 @@ cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::
                                       0.0, 1.0, -translation_y);
 }
 
-cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap,
+cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d::Costmap2D> static_costmap,
                                               const tf::Transform &transform_gt_est)
 {
   auto resolution = static_costmap->getResolution();

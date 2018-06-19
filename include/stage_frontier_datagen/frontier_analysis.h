@@ -73,7 +73,7 @@ tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2
  * @param static_costmap static costmap
  * @return affine transformation
  */
-cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap);
+cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::Costmap2D> static_costmap);
 
 
 /**
@@ -82,7 +82,7 @@ cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::
  * @param transform_gt_est transform from estimated map coordinates to groundtruth (in meters)
  * @return affine transformation
  */
-cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d::StaticLayer> static_costmap,
+cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d::Costmap2D> static_costmap,
                                               const tf::Transform &transform_gt_est);
 
 

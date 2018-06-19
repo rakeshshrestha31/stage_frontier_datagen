@@ -10,7 +10,7 @@
 
 #define STAGE_LOAD_SLEEP 5
 
-#define PLANNER_FAILURE_TOLERANCE 15
+#define PLANNER_FAILURE_TOLERANCE 15e5
 
 // std includes
 #include <random>
@@ -93,7 +93,7 @@ public:
   {
     ROS_INFO("Received new plan");
     planner_status_ = planner_status;
-    if (planner_status)
+    if (true) // planner_status)
     {
       planner_failure_count_ = 0;
       auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
@@ -171,10 +171,11 @@ public:
     auto half_width = metric_width / 2;
     auto half_height = metric_height / 2;
 
-    std::string launch_file = "stage_gmapping.launch";
+//    std::string launch_file = "stage_gmapping.launch";
 //    std::string launch_file = "stage_karto.launch";
 //    std::string launch_file = "stage_hector.launch";
 //    std::string launch_file = "stage_cartographer.launch";
+    std::string launch_file = "stage_custom_mapping.launch";
 
     std::string command = std::string("roslaunch stage_frontier_datagen ") + launch_file
                           + " world_file:=" + worldfile

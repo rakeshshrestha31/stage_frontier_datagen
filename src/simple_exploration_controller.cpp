@@ -60,6 +60,7 @@ void SimpleExplorationController::startExploration()
   if (!costmap_2d_ros_)
   {
     costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+//    costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("", tfl_));
     planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
   }
 
@@ -192,7 +193,7 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
   else
   {
     // TODO: remove comment
-//    vel_pub_.publish(twist);
+    vel_pub_.publish(twist);
   }
 
   is_running = false;
