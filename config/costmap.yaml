@@ -25,13 +25,13 @@ global_costmap:
 #  - {name: static_layer, type: 'costmap_2d::StaticLayer'}
 #  - {name: obstacle_layer, type: 'costmap_2d::ObstacleLayer'}
   - {name: ground_truth_layer, type: 'ground_truth_layer::GroundTruthLayer'}
-#  - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
+  - {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
 
-#
-#  static_layer:
-#    map_topic: /map
-#    track_unknown_space: true
-#    unknown_cost_value: 255
+
+  static_layer:
+    map_topic: /map
+    track_unknown_space: true
+    unknown_cost_value: 255
 
   obstacle layer:
     observation_sources: base_scan
