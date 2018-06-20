@@ -10,7 +10,7 @@
 
 #define STAGE_LOAD_SLEEP 5
 
-#define PLANNER_FAILURE_TOLERANCE 15e5
+#define PLANNER_FAILURE_TOLERANCE 15 // 15e5
 
 // std includes
 #include <random>
@@ -93,7 +93,7 @@ public:
   {
     ROS_INFO("Received new plan");
     planner_status_ = planner_status;
-    if (true) // planner_status)
+    if (planner_status)
     {
       planner_failure_count_ = 0;
       auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
@@ -214,7 +214,7 @@ public:
         ret = waitpid(roslaunch_process, &status_child, WNOHANG);
         // TODO: restore the planner status check and remove the force set true
 //        planner_failure_count_ = 0;
-      } while (!WIFEXITED(status_child) && planner_failure_count_ < PLANNER_FAILURE_TOLERANCE);
+      } while (!WIFEXITED(status_child) && planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
 
 //      while (!feof(pipe) && planner_status_)
@@ -272,6 +272,11 @@ public:
         floorplan, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
       runStageWorld(tmp_worldfile_name, floorplan);
+
+      if (!ros::ok())
+      {
+        return;
+      }
     }
   }
 
@@ -377,6 +382,8 @@ int main(int argc, char **argv)
 //  spin_thread.detach();
 
   KTHStageNode kth_stage_node;
+
+  while (ros::ok());
   return 0;
 
 }
