@@ -10,7 +10,7 @@ include "sick.inc"
 quit_time 0
 
 paused 0
-speedup 2.5
+speedup 11
 
 resolution 0.02
 threads 4

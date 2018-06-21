@@ -1,0 +1,8 @@
+<launch>
+
+    <param name="/use_sim_time" value="true" />
+
+    <rosparam command="load" file="$(find stage_frontier_datagen)/config/costmap.yaml" ns="kth_stage_node" />
+    <rosparam command="load" file="$(find stage_frontier_datagen)/config/pose_follower.yaml" ns="kth_stage_node" />
+
+</launch>

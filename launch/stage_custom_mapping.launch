@@ -12,8 +12,7 @@
     <arg name="max_laser_range" default="8" />
     <arg name="delta" default="0.05" />
 
-    <param name="/use_sim_time" value="true" />
-    <rosparam command="load" file="$(find stage_frontier_datagen)/config/costmap.yaml" ns="kth_stage_node" />
+    <include file="$(find stage_frontier_datagen)/launch/configurations.launch" />
 
     <group ns="kth_stage_node/global_costmap/ground_truth_layer">
         <param name="xmin" value="$(arg xmin)" />

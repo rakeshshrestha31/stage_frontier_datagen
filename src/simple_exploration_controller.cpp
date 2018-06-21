@@ -46,8 +46,8 @@ SimpleExplorationController::SimpleExplorationController()
 {
   path_follower_.initialize(&tfl_);
 
-  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(3.0),
-                                                      &SimpleExplorationController::timerPlanExploration, this, false);
+  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(15.0),
+                                                       &SimpleExplorationController::timerPlanExploration, this, false);
   cmd_vel_generator_timer_ = nh_.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration,
                                             this, false);
 
