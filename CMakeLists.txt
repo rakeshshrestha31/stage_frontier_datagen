@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   hector_exploration_planner
   hector_path_follower
   nav_msgs
+  path_smoothing_ros
   roscpp
   roslib
   rospy

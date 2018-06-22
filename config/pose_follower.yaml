@@ -1,5 +1,5 @@
 k_trans: 2.0
-k_rot: 1.0
+k_rot: 2.0
 
 tolerance_trans: 0.1
 tolerance_rot: 0.2

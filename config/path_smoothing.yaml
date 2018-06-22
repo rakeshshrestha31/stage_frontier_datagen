@@ -1,0 +1,5 @@
+hector_exploration_planner:
+  smoothed_points_per_unit:       5
+  smoothed_points_throttle:       3
+  smoothed_use_end_conditions:    false
+  smoothed_use_middle_conditions: false

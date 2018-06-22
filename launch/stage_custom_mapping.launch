@@ -10,9 +10,7 @@
     <arg name="ymax" default="20" />
 
     <arg name="max_laser_range" default="8" />
-    <arg name="delta" default="0.05" />
-
-    <include file="$(find stage_frontier_datagen)/launch/configurations.launch" />
+    <arg name="delta" default="0.075" />
 
     <group ns="kth_stage_node/global_costmap/ground_truth_layer">
         <param name="xmin" value="$(arg xmin)" />
