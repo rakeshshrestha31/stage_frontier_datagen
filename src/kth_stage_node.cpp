@@ -8,7 +8,7 @@
 // number of meters to increase on either limit of map size (to accommodate mapping errors)
 #define MAP_SIZE_CLEARANCE 2
 
-#define STAGE_LOAD_SLEEP 5
+#define STAGE_LOAD_SLEEP 8
 
 #define PLANNER_FAILURE_TOLERANCE 15 // 15e5
 
