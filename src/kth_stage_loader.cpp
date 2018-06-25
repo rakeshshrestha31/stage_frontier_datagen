@@ -112,15 +112,14 @@ KTHStageLoader::createWorldFile(const floorplanGraph &floorplan, const Point2D &
                                 std::istreambuf_iterator<char>());
 
   worldfile_content = std::regex_replace(worldfile_content, std::regex("@bitmap_image@"), bitmap_name);
+  double size_x = (floorplan.m_property->maxx - floorplan.m_property->minx) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
+  double size_y = (floorplan.m_property->maxy - floorplan.m_property->miny) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
+  std::cout << "world size: " << size_x << "x" << size_y << std::endl;
   worldfile_content = std::regex_replace(
     worldfile_content, std::regex("@size@"),
-    std::to_string(
-      (floorplan.m_property->maxx - floorplan.m_property->minx) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
-    )
+    std::to_string(size_x)
     + " "
-    + std::to_string(
-      (floorplan.m_property->maxy - floorplan.m_property->miny) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance
-    )
+    + std::to_string(size_y)
   );
 
   worldfile_content = std::regex_replace(

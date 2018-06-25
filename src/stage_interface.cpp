@@ -18,23 +18,26 @@ StageInterface::StageInterface(int argc, char **argv,
   stage_world_->Load(worldfile);
 
   robot_model_ = dynamic_cast<Stg::ModelPosition *>(stage_world_->GetModel("r0"));
-  robot_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::poseUpdateCallback, this);
+  robot_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::poseUpdateCallback, (void*)this);
+  robot_model_->Subscribe();
 
   laser_model_ = dynamic_cast<Stg::ModelRanger *>(robot_model_->GetChild("ranger:0"));
-  laser_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::laserUpdateCallback, this);
+  laser_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::laserUpdateCallback, (void*)this);
+  laser_model_->Subscribe();
 
   laser_scan_msg_->header.frame_id = "base_laser_link";
   odom_msg_->header.frame_id = "odom";
 
-  static_base_laser_tf_broadcaster_.sendTransform(getBaseLaserTf());
+  geometry_msgs::TransformStamped base_laser_tf = getBaseLaserTf();
+  static_tf_broadcaster_.sendTransform(base_laser_tf);
 
   // identity transform between base_link and base_footprint
   geometry_msgs::TransformStamped identity_transform_msg;
   tf::transformStampedTFToMsg(
-    tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_link", "base_laser_link"),
+    tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_footprint", "base_link"),
     identity_transform_msg
   );
-  static_base_tf_broadcaster_.sendTransform(identity_transform_msg);
+  static_tf_broadcaster_.sendTransform(identity_transform_msg);
 
   // TODO: no publishers
   ros::NodeHandle nh;
@@ -69,13 +72,24 @@ int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_inter
   stage_interface->odom_msg_->twist.twist.linear.y = velocity.y;
   stage_interface->odom_msg_->twist.twist.angular.z = velocity.a;
 
+  // TF broadcast
+  tf::Quaternion odomQ;
+  tf::quaternionMsgToTF(stage_interface->odom_msg_->pose.pose.orientation, odomQ);
+  tf::Transform txOdom(odomQ, tf::Point(stage_interface->odom_msg_->pose.pose.position.x, stage_interface->odom_msg_->pose.pose.position.y, 0.0));
+  stage_interface->tf_broadcaster_.sendTransform(tf::StampedTransform(
+    txOdom,
+    ros::Time::now(),
+    "odom",
+    "base_footprint"
+  ));
+
   if (stage_interface->pose_callback_functor_)
   {
     return stage_interface->pose_callback_functor_(model);
   }
   else
   {
-    return 1;
+    return 0;
   }
 
 }
@@ -107,12 +121,16 @@ int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_inte
   }
   stage_interface->laser_pub_.publish(stage_interface->laser_scan_msg_);
 
+  // sync odom message
+  stage_interface->odom_msg_->header.stamp = stage_interface->laser_scan_msg_->header.stamp;
+  stage_interface->odom_pub_.publish(stage_interface->odom_msg_);
+
   if (stage_interface->laser_callback_functor_)
   {
     return stage_interface->laser_callback_functor_(model);
   }
   else
   {
-    return 1;
+    return 0;
   }
 }

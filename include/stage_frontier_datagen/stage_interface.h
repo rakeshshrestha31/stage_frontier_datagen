@@ -96,10 +96,7 @@ protected:
   ros::Publisher odom_pub_;
 
   tf::TransformBroadcaster tf_broadcaster_;
-  tf2_ros::StaticTransformBroadcaster static_base_laser_tf_broadcaster_;
-  tf2_ros::StaticTransformBroadcaster static_base_tf_broadcaster_;
-
-
+  tf2_ros::StaticTransformBroadcaster static_tf_broadcaster_;
 };
 
 #endif //STAGE_FRONTIER_DATAGEN_STAGE_INTERFACE_H

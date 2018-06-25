@@ -8,7 +8,7 @@
 // number of meters to increase on either limit of map size (to accommodate mapping errors)
 #define MAP_SIZE_CLEARANCE 2
 
-#define STAGE_LOAD_SLEEP 8
+#define STAGE_LOAD_SLEEP 3
 
 #define PLANNER_FAILURE_TOLERANCE 15 // 15e5
 
@@ -25,6 +25,7 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <nav_msgs/Odometry.h>
+//#include <tf/tf.h>
 
 // custom includes
 #include <stage_frontier_datagen/kth_stage_loader.h>
@@ -168,9 +169,11 @@ public:
 
   void resetStageWorld()
   {
+    ROS_INFO("Starting new stage world");
     // TODO: proper functor
     boost::function<int (Stg::Model*)> empty_functor = 0;
     stage_interface_.reset(new StageInterface(argc_, argv_, stage_world_, world_file_, empty_functor, empty_functor));
+    reset_stage_world_ = false;
   }
 
   /**
@@ -202,20 +205,24 @@ public:
 
     private_nh_.setParam("global_costmap/ground_truth_layer/xmin", -half_width - MAP_SIZE_CLEARANCE);
     private_nh_.setParam("global_costmap/ground_truth_layer/ymin", -half_height - MAP_SIZE_CLEARANCE);
-    private_nh_.setParam("global_costmap/ground_truth_layer/xmin", half_width + MAP_SIZE_CLEARANCE);
-    private_nh_.setParam("global_costmap/ground_truth_layer/ymin", half_height + MAP_SIZE_CLEARANCE);
+    private_nh_.setParam("global_costmap/ground_truth_layer/xmax", half_width + MAP_SIZE_CLEARANCE);
+    private_nh_.setParam("global_costmap/ground_truth_layer/ymax", half_height + MAP_SIZE_CLEARANCE);
 
 
     world_file_ = worldfile;
     reset_stage_world_ = true;
-    while (reset_stage_world_) { ros::Duration(0.1).sleep(); };
-
+    while (reset_stage_world_);
     std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
 
+    ROS_INFO("Stepping into new stage world");
+    // single step for initial messages
+    stage_interface_->step();
     planner_status_ = true;
     planner_failure_count_ = 0;
+
     exploration_controller_->startExploration();
 
+    ROS_INFO("Starting exploration");
     try
     {
       char buffer[128];
@@ -224,8 +231,8 @@ public:
       do
       {
         stage_interface_->step();
-        ros::Duration(0.1).sleep();
-      } while (planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      } while (true); // planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
 
     }
@@ -244,7 +251,7 @@ public:
    */
   void run()
   {
-     for (const KTHStageLoader::floorplan_t &floorplan: *floorplans_)
+    for (const KTHStageLoader::floorplan_t &floorplan: *floorplans_)
     {
       if (floorplan.unobstructed_points.empty())
       {
@@ -272,6 +279,8 @@ public:
       );
       runStageWorld(tmp_worldfile_name, *(floorplan.graph));
 
+      // TODO: remove it
+      return;
       if (!ros::ok())
       {
         return;
@@ -405,7 +414,7 @@ int main(int argc, char **argv)
 
   KTHStageNode kth_stage_node(argc, argv, stage_world);
   boost::thread run_thread(boost::bind(&KTHStageNode::run, &kth_stage_node));
-//  run_thread.detach();
+  run_thread.detach();
 
   while (ros::ok())
   {
@@ -418,7 +427,6 @@ int main(int argc, char **argv)
     if (kth_stage_node.isResetStageWorld())
     {
       kth_stage_node.resetStageWorld();
-      kth_stage_node.clearResetStageWorld();
     }
 
   }
