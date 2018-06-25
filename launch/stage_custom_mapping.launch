@@ -29,8 +29,4 @@
         <param name="right_side_y_outer" value="-0.205"/>
         <param name="right_side_y_inner" value="-0.11"/>
     </node>
-
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find stage_frontier_datagen)/config/hector_exploration.rviz">
-        <remap from="base_scan" to="$(arg laser_topic)" />
-    </node>
 </launch>

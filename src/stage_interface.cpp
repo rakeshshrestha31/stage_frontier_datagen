@@ -6,27 +6,113 @@
 
 using namespace Stg;
 
-StageInterface::StageInterface(int argc, char **argv, const std::string &worldfile,
+StageInterface::StageInterface(int argc, char **argv,
+                               boost::shared_ptr<StepWorldGui> stage_world, const std::string &worldfile,
                                const boost::function<int (Stg::Model*)> &pose_callback, const boost::function<int (Stg::Model*)> &laser_callback)
-  : stage_world_(new StepWorldGui(800, 700, "Exploration Datagenerator")),
-    pose_callback_functional_(pose_callback),
-    laser_callback_functional_(laser_callback)
+  : stage_world_(stage_world),
+    pose_callback_functor_(pose_callback),
+    laser_callback_functor_(laser_callback),
+    laser_scan_msg_(new sensor_msgs::LaserScan()),
+    odom_msg_(new nav_msgs::Odometry())
 {
   stage_world_->Load(worldfile);
 
-  auto robot_model = stage_world_->GetModel("r0");
-  robot_model->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::poseUpdateCallback, this);
+  robot_model_ = dynamic_cast<Stg::ModelPosition *>(stage_world_->GetModel("r0"));
+  robot_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::poseUpdateCallback, this);
 
-  auto laser_model = robot_model->GetChild("ranger:0");
-  laser_model->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::laserUpdateCallback, this);
+  laser_model_ = dynamic_cast<Stg::ModelRanger *>(robot_model_->GetChild("ranger:0"));
+  laser_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::laserUpdateCallback, this);
+
+  laser_scan_msg_->header.frame_id = "base_laser_link";
+  odom_msg_->header.frame_id = "odom";
+
+  static_base_laser_tf_broadcaster_.sendTransform(getBaseLaserTf());
+
+  // identity transform between base_link and base_footprint
+  geometry_msgs::TransformStamped identity_transform_msg;
+  tf::transformStampedTFToMsg(
+    tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_link", "base_laser_link"),
+    identity_transform_msg
+  );
+  static_base_tf_broadcaster_.sendTransform(identity_transform_msg);
+
+  // TODO: no publishers
+  ros::NodeHandle nh;
+  laser_pub_ = nh.advertise<sensor_msgs::LaserScan>("base_scan", 10);
+  odom_pub_ = nh.advertise<nav_msgs::Odometry>("odom", 10);
+}
+
+geometry_msgs::TransformStamped StageInterface::getBaseLaserTf()
+{
+  assert(robot_model_ & laser_model_);
+
+  Stg::Pose lp = laser_model_->GetPose();
+  tf::Quaternion laserQ;
+  laserQ.setRPY(0.0, 0.0, lp.a);
+  tf::Transform txLaser =  tf::Transform(laserQ, tf::Point(lp.x, lp.y, robot_model_->GetGeom().size.z + lp.z));
+
+  geometry_msgs::TransformStamped stamped_tf_msg;
+  tf::transformStampedTFToMsg(tf::StampedTransform(txLaser, ros::Time::now(), "base_link", "base_laser_link"), stamped_tf_msg);
+  return stamped_tf_msg;
 }
 
 int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_interface)
 {
-  return stage_interface->pose_callback_functional_(model);
+  stage_interface->odom_msg_->header.stamp = ros::Time::now();
+
+  stage_interface->odom_msg_->pose.pose.position.x = stage_interface->robot_model_->est_pose.x;
+  stage_interface->odom_msg_->pose.pose.position.y = stage_interface->robot_model_->est_pose.y;
+  stage_interface->odom_msg_->pose.pose.orientation = tf::createQuaternionMsgFromYaw(stage_interface->robot_model_->est_pose.a);
+
+  auto velocity = stage_interface->robot_model_->GetVelocity();
+  stage_interface->odom_msg_->twist.twist.linear.x = velocity.x;
+  stage_interface->odom_msg_->twist.twist.linear.y = velocity.y;
+  stage_interface->odom_msg_->twist.twist.angular.z = velocity.a;
+
+  if (stage_interface->pose_callback_functor_)
+  {
+    return stage_interface->pose_callback_functor_(model);
+  }
+  else
+  {
+    return 1;
+  }
+
 }
 
 int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_interface)
 {
-  return stage_interface->laser_callback_functional_(model);
+  assert(stage_interface && model);
+
+  stage_interface->laser_scan_msg_->header.stamp = ros::Time::now();
+  const std::vector<Stg::ModelRanger::Sensor>& sensors = stage_interface->laser_model_->GetSensors();
+
+  if( sensors.size() > 1 )
+    ROS_WARN( "ROS Stage currently supports rangers with 1 sensor only." );
+
+  const Stg::ModelRanger::Sensor& sensor = sensors[0];
+
+  stage_interface->laser_scan_msg_->angle_min = -sensor.fov/2.0;
+  stage_interface->laser_scan_msg_->angle_max = +sensor.fov/2.0;
+  stage_interface->laser_scan_msg_->angle_increment = sensor.fov/(double)(sensor.sample_count-1);
+  stage_interface->laser_scan_msg_->range_min = sensor.range.min;
+  stage_interface->laser_scan_msg_->range_max = sensor.range.max;
+  stage_interface->laser_scan_msg_->ranges.resize(sensor.ranges.size());
+  stage_interface->laser_scan_msg_->intensities.resize(sensor.intensities.size());
+
+  for(unsigned int i = 0; i < sensor.ranges.size(); i++)
+  {
+    stage_interface->laser_scan_msg_->ranges[i] = sensor.ranges[i];
+    stage_interface->laser_scan_msg_->intensities[i] = sensor.intensities[i];
+  }
+  stage_interface->laser_pub_.publish(stage_interface->laser_scan_msg_);
+
+  if (stage_interface->laser_callback_functor_)
+  {
+    return stage_interface->laser_callback_functor_(model);
+  }
+  else
+  {
+    return 1;
+  }
 }

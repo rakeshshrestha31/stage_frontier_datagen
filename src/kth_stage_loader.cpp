@@ -17,6 +17,8 @@ using namespace stage_frontier_datagen;
 
 int KTHStageLoader::loadDirectory(std::string dataset_dir)
 {
+  dataset_dir_ = dataset_dir;
+
   floorplan::GraphDatabase D;
   D.loadGraphs(dataset_dir, "floor");
   auto floorplan_graphs = D.getGraphs();
@@ -30,7 +32,14 @@ int KTHStageLoader::loadDirectory(std::string dataset_dir)
         && graph.m_property->centroid.x != -1
         && graph.m_property->centroid.y != -1)
     {
-      floorplan_graphs_.push_back(graph);
+      // The BGL_FORALL_VERTICES macro doesn't work inside a thread, so do these in constructor before threading
+      cv::Mat map = floorplan::GraphFileOperations::getGraphLayout(graph, MAP_RESOLUTION, MAP_SIZE);
+      floorplan_t floorplan_obj(
+        &graph,
+        map,
+        getUnobstructedPoints(graph)
+      );
+      floorplan_graphs_.push_back(floorplan_obj);
     }
   }
 

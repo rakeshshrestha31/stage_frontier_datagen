@@ -31,10 +31,12 @@
 #include <stage_frontier_datagen/simple_exploration_controller.h>
 #include <stage_frontier_datagen/utils.h>
 #include <stage_frontier_datagen/frontier_analysis.h>
+#include <stage_frontier_datagen/stage_interface.h>
 
 // boost includes
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
+#include <X11/Xlib.h>
 
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -43,25 +45,31 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
-  KTHStageNode()
-    : private_nh_("~"),
+  KTHStageNode(int argc, char **argv, boost::shared_ptr<StageInterface::StepWorldGui> stage_world)
+    : argc_(argc), argv_(argv),
+      stage_world_(stage_world),
+      reset_stage_world_(false),
+      private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
       planner_failure_count_(0),
-      spin_thread_(&KTHStageNode::spin, this)
+      spin_thread_(&KTHStageNode::spin, this),
+      kth_stage_loader_(new KTHStageLoader())
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
     {
       ROS_ERROR("ROSPARAM dataset_dir not set");
       exit(1);
     }
+    package_path_ = ros::package::getPath(PACKAGE_NAME);
     last_path_.header.stamp = ros::Time(0);
 
-    kth_stage_loader_.loadDirectory(dataset_dir_);
+    kth_stage_loader_->loadDirectory(dataset_dir_);
+    floorplans_ = &(kth_stage_loader_->getFloorplans());
+
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
     groundtruth_odom_subscriber_ = private_nh_.subscribe("/base_pose_ground_truth", 5, &KTHStageNode::groundtruthOdomCallback, this);
-    run();
   }
 
   /**
@@ -158,6 +166,13 @@ public:
     }
   }
 
+  void resetStageWorld()
+  {
+    // TODO: proper functor
+    boost::function<int (Stg::Model*)> empty_functor = 0;
+    stage_interface_.reset(new StageInterface(argc_, argv_, stage_world_, world_file_, empty_functor, empty_functor));
+  }
+
   /**
    * @brief run the stage with SLAM
    * @param worldfile world file for stage
@@ -171,33 +186,31 @@ public:
     auto half_width = metric_width / 2;
     auto half_height = metric_height / 2;
 
-//    std::string launch_file = "stage_gmapping.launch";
-//    std::string launch_file = "stage_karto.launch";
-//    std::string launch_file = "stage_hector.launch";
-//    std::string launch_file = "stage_cartographer.launch";
-    std::string launch_file = "stage_custom_mapping.launch";
+//    std::string launch_file = "stage_custom_mapping.launch";
+//
+//    std::string command = std::string("roslaunch stage_frontier_datagen ") + launch_file
+//                          + " world_file:=" + worldfile
+//                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
+//                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
+//                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
+//                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
+//
+//    ROS_INFO("Command: %s", command.c_str());
+//    auto roslaunch_process = utils::popen2(
+//        command.c_str(), &pipe
+//    );
 
-    std::string command = std::string("roslaunch stage_frontier_datagen ") + launch_file
-                          + " world_file:=" + worldfile
-                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
-                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
-                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
-                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
+    private_nh_.setParam("global_costmap/ground_truth_layer/xmin", -half_width - MAP_SIZE_CLEARANCE);
+    private_nh_.setParam("global_costmap/ground_truth_layer/ymin", -half_height - MAP_SIZE_CLEARANCE);
+    private_nh_.setParam("global_costmap/ground_truth_layer/xmin", half_width + MAP_SIZE_CLEARANCE);
+    private_nh_.setParam("global_costmap/ground_truth_layer/ymin", half_height + MAP_SIZE_CLEARANCE);
 
-    ROS_INFO("Command: %s", command.c_str());
-    auto roslaunch_process = utils::popen2(
-        command.c_str(), &pipe
-    );
 
-//    auto pipe = popen((std::string("roslaunch stage_frontier_datagen stage_gmapping.launch world_file:=") + worldfile).c_str(), "r");
+    world_file_ = worldfile;
+    reset_stage_world_ = true;
+    while (reset_stage_world_) { ros::Duration(0.1).sleep(); };
+
     std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
-
-    std::cout << kill(roslaunch_process, 0) << std::endl;
-    if (roslaunch_process <= 0 || kill(roslaunch_process, 0) < 0)
-    {
-      ROS_ERROR("Error launch simulation");
-      return;
-    }
 
     planner_status_ = true;
     planner_failure_count_ = 0;
@@ -210,18 +223,11 @@ public:
       int ret;
       do
       {
-        // TODO: find a way to read the piped output
-        ret = waitpid(roslaunch_process, &status_child, WNOHANG);
-        // TODO: restore the planner status check and remove the force set true
-//        planner_failure_count_ = 0;
-      } while (!WIFEXITED(status_child) && planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
+        stage_interface_->step();
+        ros::Duration(0.1).sleep();
+      } while (planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
 
-//      while (!feof(pipe) && planner_status_)
-//      {
-//        if (fgets(buffer, 128, pipe) != NULL)
-//          std:cout << buffer << std::endl;
-//      }
     }
     catch (...)
     {
@@ -231,8 +237,6 @@ public:
 
     while (exploration_controller_->isPlannerRunning());
     exploration_controller_->stopExploration();
-
-    kill(roslaunch_process, SIGKILL);
   }
 
   /**
@@ -240,38 +244,33 @@ public:
    */
   void run()
   {
-    std::string package_name = ros::package::getPath(PACKAGE_NAME);
-
-    const std::vector<floorplanGraph> &floorplans = kth_stage_loader_.getFloorplans();
-    for (const auto &floorplan: floorplans)
+     for (const KTHStageLoader::floorplan_t &floorplan: *floorplans_)
     {
-      auto free_points = kth_stage_loader_.getUnobstructedPoints(floorplan);
-      if (free_points.empty())
+      if (floorplan.unobstructed_points.empty())
       {
         continue;
       }
 
-      size_t random_index = std::rand() % free_points.size();
+      size_t random_index = std::rand() % floorplan.unobstructed_points.size();
       Point2D random_point_meters = convertMapCoordsToMeters(
         Point2D(
-          free_points.at(random_index).x,
-          free_points.at(random_index).y
+          floorplan.unobstructed_points.at(random_index).x,
+          floorplan.unobstructed_points.at(random_index).y
         ),
         MAP_SIZE,
         MAP_RESOLUTION
       );
 
-      current_groundtruth_map_ = floorplan::GraphFileOperations::saveGraphLayoutToPNG(TMP_FLOORPLAN_BITMAP, floorplan, MAP_RESOLUTION, MAP_SIZE);
+      current_groundtruth_map_ = floorplan.map.clone();
       cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
 
-      writeDebugMap(floorplan, current_groundtruth_map_, free_points, random_index);
+//      writeDebugMap(*(floorplan.graph), current_groundtruth_map_, floorplan.unobstructed_points, random_index);
 
-
-      std::string worldfile_directory = package_name + "/worlds/";
-      std::string tmp_worldfile_name = kth_stage_loader_.createWorldFile(
-        floorplan, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
+      std::string worldfile_directory(std::string(package_path_) + "/worlds/");
+      std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
+        *(floorplan.graph), random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
-      runStageWorld(tmp_worldfile_name, floorplan);
+      runStageWorld(tmp_worldfile_name, *(floorplan.graph));
 
       if (!ros::ok())
       {
@@ -287,7 +286,7 @@ public:
    * @param free_points
    * @param random_index
    */
-  void writeDebugMap(floorplanGraph floorplan, cv::Mat map, const std::vector<cv::Point> &free_points, size_t random_index)
+  void writeDebugMap(const floorplanGraph &floorplan, cv::Mat map, const std::vector<cv::Point> &free_points, size_t random_index)
   {
     cv::Mat free_points_map(map.rows, map.cols, map.type(), cv::Scalar(0));
     for (const auto &free_point: free_points)
@@ -315,6 +314,16 @@ public:
     std::string img_filename = std::string("/tmp/") + floorplan_name + ".png";
     cv::imwrite(img_filename, rgb_image);
     ROS_INFO("wrote map: %s", img_filename.c_str());
+  }
+
+  bool isResetStageWorld()
+  {
+    return reset_stage_world_;
+  }
+
+  bool clearResetStageWorld()
+  {
+    reset_stage_world_ = false;
   }
 
   /**
@@ -356,9 +365,10 @@ public:
 
 protected:
   ros::NodeHandle private_nh_;
-  KTHStageLoader kth_stage_loader_;
+  boost::shared_ptr<KTHStageLoader> kth_stage_loader_;
   boost::shared_ptr<SimpleExplorationController> exploration_controller_;
   std::string dataset_dir_;
+  const std::vector<KTHStageLoader::floorplan_t> *floorplans_;
 
   nav_msgs::Path last_path_;
   cv::Mat current_groundtruth_map_;
@@ -371,19 +381,47 @@ protected:
   boost::atomic_bool planner_status_;
   size_t planner_failure_count_;
 
+  boost::shared_ptr<StageInterface> stage_interface_;
+  boost::shared_ptr<StageInterface::StepWorldGui> stage_world_;
+  boost::atomic_bool reset_stage_world_;
+  std::string world_file_;
+  int argc_;
+  char **argv_;
+
+  std::string package_path_;
 };
 
 int main(int argc, char **argv)
 {
+  XInitThreads();
+  Stg::Init(&argc, &argv);
+  boost::shared_ptr<StageInterface::StepWorldGui> stage_world(new StageInterface::StepWorldGui(800, 700, "Exploration Data Generator"));
+
   ros::init(argc, argv, "kth_stage_node");
   srand(std::time(NULL));
 
 //  auto spin_thread = boost::thread(boost::bind(&ros::spin));
 //  spin_thread.detach();
 
-  KTHStageNode kth_stage_node;
+  KTHStageNode kth_stage_node(argc, argv, stage_world);
+  boost::thread run_thread(boost::bind(&KTHStageNode::run, &kth_stage_node));
+//  run_thread.detach();
 
-  while (ros::ok());
+  while (ros::ok())
+  {
+    if (Fl::first_window())
+    {
+      Fl::wait();
+    }
+
+    // resetting of stage world needs to be done in the main function
+    if (kth_stage_node.isResetStageWorld())
+    {
+      kth_stage_node.resetStageWorld();
+      kth_stage_node.clearResetStageWorld();
+    }
+
+  }
   return 0;
 
 }

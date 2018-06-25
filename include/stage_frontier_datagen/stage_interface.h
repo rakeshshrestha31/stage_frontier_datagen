@@ -13,6 +13,13 @@
 #include <boost/function.hpp>
 #include <boost/shared_ptr.hpp>
 
+#include <ros/ros.h>
+#include <sensor_msgs/LaserScan.h>
+#include <nav_msgs/Odometry.h>
+
+#include <tf2_ros/static_transform_broadcaster.h>
+#include <tf/transform_broadcaster.h>
+
 class StageInterface
 {
 public:
@@ -41,8 +48,20 @@ public:
    * @param argv commandline argument argv
    * @param worldfile location of worldfile
    */
-  StageInterface(int argc, char **argv, const std::string &worldfile,
+  StageInterface(int argc, char **argv,
+                 boost::shared_ptr<StepWorldGui> stage_world, const std::string &worldfile,
                  const boost::function<int (Stg::Model*)> &pose_callback, const boost::function<int (Stg::Model*)> &laser_callback);
+
+  /**
+   * @brief adapted from stage_ros
+   * @return tf from laser to base frame
+   */
+  geometry_msgs::TransformStamped getBaseLaserTf();
+
+  /**
+   * @brief step the world by iteration
+   */
+  void step() { stage_world_->step(); }
 
   /**
    * @brief stage callback for pose update (static because we need function pointer)
@@ -60,11 +79,26 @@ public:
    */
   static int laserUpdateCallback(Stg::Model *model, StageInterface *stage_interface);
 
-  boost::function<int (Stg::Model*)> laser_callback_functional_;
-  boost::function<int (Stg::Model*)> pose_callback_functional_;
+  boost::function<int (Stg::Model*)> laser_callback_functor_;
+  boost::function<int (Stg::Model*)> pose_callback_functor_;
 protected:
   // TODO: make the type of stage_world_ only World (to use without GUI)
   boost::shared_ptr<StepWorldGui> stage_world_;
+
+  Stg::ModelRanger *laser_model_;
+  Stg::ModelPosition *robot_model_;
+
+  sensor_msgs::LaserScanPtr laser_scan_msg_;
+  nav_msgs::OdometryPtr odom_msg_;
+
+  // TODO: don't use publishers
+  ros::Publisher laser_pub_;
+  ros::Publisher odom_pub_;
+
+  tf::TransformBroadcaster tf_broadcaster_;
+  tf2_ros::StaticTransformBroadcaster static_base_laser_tf_broadcaster_;
+  tf2_ros::StaticTransformBroadcaster static_base_tf_broadcaster_;
+
 
 };
 

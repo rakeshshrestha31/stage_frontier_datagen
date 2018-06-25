@@ -28,6 +28,16 @@ namespace stage_frontier_datagen
 class KTHStageLoader
 {
 public:
+  class floorplan_t {
+  public:
+    floorplan_t(const floorplanGraph *_graph, cv::Mat _map, std::vector<cv::Point> _unobstructed_points) :
+      graph(_graph), map(_map), unobstructed_points(_unobstructed_points) {}
+
+    const floorplanGraph *graph;
+    cv::Mat map;
+    std::vector<cv::Point> unobstructed_points;
+  };
+
   /**
    * @brief creates the floorplan data structures
    * @param dataset_dir dataset directory (containing .xml specifications of floorplans)
@@ -38,7 +48,7 @@ public:
    *
    * @return reference to floorplans in the dataset
    */
-  const std::vector<floorplanGraph> &getFloorplans() const { return floorplan_graphs_; }
+  const std::vector<floorplan_t> &getFloorplans() const { return floorplan_graphs_; }
 
 
 
@@ -60,11 +70,11 @@ public:
   createWorldFile(const floorplanGraph &floorplan, const Point2D &robot_position,
                   const std::string &base_path, const std::string &bitmap_name);
 
-
-
 protected:
-  std::string dataset_dir_;                                 ///< dataset directory (containing .xml specifications of floorplans)
-  std::vector<floorplanGraph> floorplan_graphs_; ///< vector of floorplan graphs
+  std::string dataset_dir_;                      ///< dataset directory (containing .xml specifications of floorplans)
+
+  std::vector<floorplan_t> floorplan_graphs_; ///< vector of floorplan graphs
+
 }; // class KTHStageLoader
 
 } // namespace stage_frontier_datagen
