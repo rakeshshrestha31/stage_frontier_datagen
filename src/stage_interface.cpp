@@ -8,10 +8,9 @@ using namespace Stg;
 
 StageInterface::StageInterface(int argc, char **argv,
                                boost::shared_ptr<StepWorldGui> stage_world, const std::string &worldfile,
-                               const boost::function<int (Stg::Model*)> &pose_callback, const boost::function<int (Stg::Model*)> &laser_callback)
+                               const boost::function<int (sensor_msgs::LaserScanConstPtr, nav_msgs::OdometryConstPtr)> &sensor_callback)
   : stage_world_(stage_world),
-    pose_callback_functor_(pose_callback),
-    laser_callback_functor_(laser_callback),
+    sensor_callback_functor_(sensor_callback),
     laser_scan_msg_(new sensor_msgs::LaserScan()),
     odom_msg_(new nav_msgs::Odometry())
 {
@@ -100,15 +99,7 @@ int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_inter
     "base_footprint"
   ));
 
-  if (stage_interface->pose_callback_functor_)
-  {
-    return stage_interface->pose_callback_functor_(model);
-  }
-  else
-  {
-    return 0;
-  }
-
+  return 0;
 }
 
 int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_interface)
@@ -155,9 +146,9 @@ int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_inte
     );
   }
 
-  if (stage_interface->laser_callback_functor_)
+  if (stage_interface->sensor_callback_functor_)
   {
-    return stage_interface->laser_callback_functor_(model);
+    return stage_interface->sensor_callback_functor_(stage_interface->laser_scan_msg_, stage_interface->odom_msg_);
   }
   else
   {

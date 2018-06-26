@@ -50,6 +50,7 @@ public:
     : argc_(argc), argv_(argv),
       stage_world_(stage_world),
       reset_stage_world_(false),
+      is_latest_sensor_received_(false),
       private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
@@ -170,8 +171,11 @@ public:
   {
     ROS_INFO("Starting new stage world");
     // TODO: proper functor
-    boost::function<int (Stg::Model*)> empty_functor = 0;
-    stage_interface_.reset(new StageInterface(argc_, argv_, stage_world_, world_file_, empty_functor, empty_functor));
+    stage_interface_ = boost::make_shared<StageInterface>(
+      argc_, argv_, stage_world_, world_file_,
+      boost::bind(&KTHStageNode::sensorsCallback, this, _1, _2)
+    );
+
     reset_stage_world_ = false;
 
     if (exploration_controller_)
@@ -195,25 +199,10 @@ public:
     auto half_width = metric_width / 2;
     auto half_height = metric_height / 2;
 
-//    std::string launch_file = "stage_custom_mapping.launch";
-//
-//    std::string command = std::string("roslaunch stage_frontier_datagen ") + launch_file
-//                          + " world_file:=" + worldfile
-//                          + " xmin:=" + std::to_string(-half_width - MAP_SIZE_CLEARANCE)
-//                          + " ymin:=" + std::to_string(-half_height - MAP_SIZE_CLEARANCE)
-//                          + " xmax:=" + std::to_string(half_width + MAP_SIZE_CLEARANCE)
-//                          + " ymax:=" + std::to_string(half_height + MAP_SIZE_CLEARANCE);
-//
-//    ROS_INFO("Command: %s", command.c_str());
-//    auto roslaunch_process = utils::popen2(
-//        command.c_str(), &pipe
-//    );
-
     private_nh_.setParam("global_costmap/ground_truth_layer/xmin", -half_width - MAP_SIZE_CLEARANCE);
     private_nh_.setParam("global_costmap/ground_truth_layer/ymin", -half_height - MAP_SIZE_CLEARANCE);
     private_nh_.setParam("global_costmap/ground_truth_layer/xmax", half_width + MAP_SIZE_CLEARANCE);
     private_nh_.setParam("global_costmap/ground_truth_layer/ymax", half_height + MAP_SIZE_CLEARANCE);
-
 
     world_file_ = worldfile;
     reset_stage_world_ = true;
@@ -237,10 +226,12 @@ public:
       do
       {
         stage_interface_->step();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        while (!is_latest_sensor_received_);
+        is_latest_sensor_received_ = false;
       } while (true); // planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
-
     }
     catch (...)
     {
@@ -341,6 +332,12 @@ public:
     reset_stage_world_ = false;
   }
 
+  int sensorsCallback(const sensor_msgs::LaserScanConstPtr &laser_scan, const nav_msgs::OdometryConstPtr &odom)
+  {
+    is_latest_sensor_received_ = true;
+    return 0;
+  }
+
   /**
    * @brief function for ros spin (to be called as a thread). Stops spinning when planner isn't ready to avoid costmap updates
    */
@@ -401,6 +398,9 @@ protected:
   std::string world_file_;
   int argc_;
   char **argv_;
+
+  /** @brief whether the latest sensor has been received (used for stepping stage world as soon as it's received */
+  boost::atomic_bool is_latest_sensor_received_;
 
   std::string package_path_;
 };

@@ -52,7 +52,7 @@ public:
    */
   StageInterface(int argc, char **argv,
                  boost::shared_ptr<StepWorldGui> stage_world, const std::string &worldfile,
-                 const boost::function<int (Stg::Model*)> &pose_callback, const boost::function<int (Stg::Model*)> &laser_callback);
+                 const boost::function<int (sensor_msgs::LaserScanConstPtr, nav_msgs::OdometryConstPtr)> &sensor_callback);
 
   /**
    * @brief adapted from stage_ros
@@ -87,8 +87,7 @@ public:
    */
   static int laserUpdateCallback(Stg::Model *model, StageInterface *stage_interface);
 
-  boost::function<int (Stg::Model*)> laser_callback_functor_;
-  boost::function<int (Stg::Model*)> pose_callback_functor_;
+  boost::function<int (sensor_msgs::LaserScanConstPtr, nav_msgs::OdometryConstPtr)> sensor_callback_functor_;
 protected:
   // TODO: make the type of stage_world_ only World (to use without GUI)
   boost::shared_ptr<StepWorldGui> stage_world_;
