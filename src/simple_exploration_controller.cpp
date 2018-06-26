@@ -59,7 +59,7 @@ void SimpleExplorationController::startExploration()
 {
   if (!costmap_2d_ros_)
   {
-    costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+    initializeCostmap();
 //    costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("", tfl_));
     planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
   }
@@ -270,6 +270,29 @@ void SimpleExplorationController::updateRobotOdom(const nav_msgs::OdometryConstP
     path_follower_.setRobotOdom(odom);
   }
 }
+
+void SimpleExplorationController::initializeCostmap()
+{
+  costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+
+  boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros_->getCostmap()->getMutex()));
+  for (const auto &layer: *(costmap_2d_ros_->getLayeredCostmap()->getPlugins()))
+  {
+    std::string layer_name = layer->getName();
+    if (layer_name.find("ground_truth") != std::string::npos)
+    {
+      ground_truth_layer_ = boost::static_pointer_cast<ground_truth_layer::GroundTruthLayer>(layer);
+      break;
+    }
+  }
+
+  if (ground_truth_layer_)
+  {
+    // unsubscribe the topics. We want to updaet the data manually here
+    ground_truth_layer_->deactivate();
+  }
+}
+
 } // namespace stage_frontier_datagen
 
 #include <costmap_2d/costmap_layer.h>

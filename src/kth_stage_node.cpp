@@ -229,11 +229,11 @@ public:
       {
         stage_interface_->step();
         exploration_controller_->generateCmdVel();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+//        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         while (!is_latest_sensor_received_);
         is_latest_sensor_received_ = false;
-      } while (true); // planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
+      } while (planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
     }
     catch (...)
@@ -337,8 +337,10 @@ public:
 
   int sensorsCallback(const sensor_msgs::LaserScanConstPtr &laser_scan, const nav_msgs::OdometryConstPtr &odom)
   {
-    is_latest_sensor_received_ = true;
     exploration_controller_->updateRobotOdom(odom);
+    exploration_controller_->updateCostmap(laser_scan, odom);
+    is_latest_sensor_received_ = true;
+
     return 0;
   }
 

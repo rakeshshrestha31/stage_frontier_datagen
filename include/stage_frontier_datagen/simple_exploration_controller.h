@@ -11,6 +11,8 @@
 #include <hector_path_follower/hector_path_follower.h>
 #include <nav_msgs/Path.h>
 
+#include <ground_truth_layer/ground_truth_layer.h>
+
 #include <boost/shared_ptr.hpp>
 #include <boost/function.hpp>
 
@@ -75,6 +77,23 @@ public:
   cv::Mat getCurrentMap(double resolution);
 
   /**
+   * @brief initializes costmap_2d_ros_ member. Also gets the ground_truth layer for laser scan updates
+   */
+  void initializeCostmap();
+
+  /**
+   * @brief updates robots odom for planner and path_finder members
+   * @param odom
+   */
+  void updateRobotOdom(const nav_msgs::OdometryConstPtr &odom);
+
+  /**
+   * @brief updates update_cmd_vel_functor_ member
+   * @param update_cmd_vel_functor
+   */
+  void updateCmdVelFunctor(const boost::function<void(const geometry_msgs::Twist&)> &update_cmd_vel_functor);
+
+  /**
    *
    * @param callback callback function to call when new plan received
    */
@@ -102,18 +121,23 @@ public:
   const boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> getPlanner() const { return planner_; }
 
   /**
-   * @brief updates robots odom for planner and path_finder members
-   * @param odom
+   * @brief updates ground_truth_layer of the costmap
+   * @param laser_scan
+   * @param odometry
    */
-  void updateRobotOdom(const nav_msgs::OdometryConstPtr &odom);
+  void updateCostmap(const sensor_msgs::LaserScanConstPtr &laser_scan,
+                     const nav_msgs::OdometryConstPtr &odometry)
+  {
+    if (ground_truth_layer_)
+    {
+      ground_truth_layer_->updateMap(laser_scan, odometry);
+    }
+  }
 
-  /**
-   * @brief updates update_cmd_vel_functor_ member
-   * @param update_cmd_vel_functor
-   */
-  void updateCmdVelFunctor(const boost::function<void(const geometry_msgs::Twist&)> &update_cmd_vel_functor);
 protected:
   boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;
+  boost::shared_ptr<ground_truth_layer::GroundTruthLayer> ground_truth_layer_;
+
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner_;
   pose_follower::HectorPathFollower path_follower_;
 

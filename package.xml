@@ -97,6 +97,9 @@
   <exec_depend>tf</exec_depend>
   <exec_depend>tf2</exec_depend>
 
+  <build_depend>ground_truth_layer</build_depend>
+  <build_export_depend>ground_truth_layer</build_export_depend>
+  <exec_depend>ground_truth_layer</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

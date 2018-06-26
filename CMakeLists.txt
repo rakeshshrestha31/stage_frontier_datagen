@@ -10,6 +10,7 @@ add_compile_options(-std=c++14)
 find_package(catkin REQUIRED COMPONENTS
   costmap_2d
   geometry_msgs
+  ground_truth_layer
   hector_exploration_planner
   hector_path_follower
   nav_msgs
