@@ -116,11 +116,6 @@ KTHStageLoader::createWorldFile(const floorplanGraph &floorplan, const Point2D &
   double size_y = (floorplan.m_property->maxy - floorplan.m_property->miny) * floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
   std::cout << "world size: " << size_x << "x" << size_y << std::endl;
 
-  if (std::abs(size_x) > 50 || std::abs(size_y) > 50)
-  {
-    std::cout << "invalid floorplan" << std::endl;
-  }
-
   worldfile_content = std::regex_replace(
     worldfile_content, std::regex("@size@"),
     std::to_string(size_x)

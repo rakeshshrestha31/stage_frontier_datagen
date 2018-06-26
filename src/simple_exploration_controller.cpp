@@ -32,8 +32,6 @@
 //=================================================================================================
 
 #include <stage_frontier_datagen/simple_exploration_controller.h>
-#include <costmap_2d/costmap_layer.h>
-
 namespace stage_frontier_datagen
 {
 SimpleExplorationController::SimpleExplorationController(const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor)
@@ -47,10 +45,11 @@ SimpleExplorationController::SimpleExplorationController(const boost::function<v
 {
   path_follower_.initialize(&tfl_);
 
-  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(15.0),
+  // TODO: update exploration plan a few waypoints before your previous plan will finish
+  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(1.0),
                                                        &SimpleExplorationController::timerPlanExploration, this, false);
-  cmd_vel_generator_timer_ = nh_.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration,
-                                            this, false);
+//  cmd_vel_generator_timer_ = nh_.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration,
+//                                            this, false);
 
   vel_pub_ = nh_.advertise<geometry_msgs::Twist>("cmd_vel", 10);
   exploration_plan_pub_ = nh_.advertise<nav_msgs::Path>("exploration_path", 2);
@@ -105,7 +104,9 @@ bool SimpleExplorationController::updatePlan()
   }
 
   tf::Stamped<tf::Pose> robot_pose_tf;
-  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
+//  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
+  bool robot_pose_status = planner_->getRobotPose(robot_pose_tf);
+
   if (!robot_pose_status || robot_pose_tf.getRotation().length2() < 1e-5)
   {
     ROS_ERROR("Failed to get robot pose from costmap");
@@ -177,6 +178,11 @@ void SimpleExplorationController::timerPlanExploration(const ros::TimerEvent &e)
 }
 
 void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e)
+{
+  generateCmdVel();
+}
+
+void SimpleExplorationController::generateCmdVel()
 {
   // whether the callback is already running
   static boost::atomic_bool is_running(false);
@@ -255,4 +261,15 @@ void SimpleExplorationController::updateCmdVelFunctor(const boost::function<void
   boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
   update_cmd_vel_functor_ = update_cmd_vel_functor;
 }
+
+void SimpleExplorationController::updateRobotOdom(const nav_msgs::OdometryConstPtr &odom)
+{
+  if (planner_)
+  {
+    planner_->setRobotOdom(odom);
+    path_follower_.setRobotOdom(odom);
+  }
+}
 } // namespace stage_frontier_datagen
+
+#include <costmap_2d/costmap_layer.h>

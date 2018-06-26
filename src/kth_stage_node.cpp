@@ -110,8 +110,10 @@ public:
       auto frontier_img = planner->getFrontierImg();
       auto clustered_frontier_poses = planner->getClusteredFrontierPoints();
 
-      auto groundtruth_odom = getGroundtruthOdom();
-      auto transform_gt_est = frontier_analysis::getTransformGroundtruthEstimated(costmap_2d_ros, groundtruth_odom);
+//      auto groundtruth_odom = getGroundtruthOdom();
+//      auto transform_gt_est = frontier_analysis::getTransformGroundtruthEstimated(costmap_2d_ros, groundtruth_odom);
+
+      auto transform_gt_est = tf::Transform::getIdentity();
 
       auto costmap_image = frontier_analysis::getMap(
         costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution(), transform_gt_est
@@ -226,6 +228,7 @@ public:
       do
       {
         stage_interface_->step();
+        exploration_controller_->generateCmdVel();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         while (!is_latest_sensor_received_);
@@ -335,6 +338,7 @@ public:
   int sensorsCallback(const sensor_msgs::LaserScanConstPtr &laser_scan, const nav_msgs::OdometryConstPtr &odom)
   {
     is_latest_sensor_received_ = true;
+    exploration_controller_->updateRobotOdom(odom);
     return 0;
   }
 

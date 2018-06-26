@@ -40,6 +40,11 @@ public:
   void timerCmdVelGeneration(const ros::TimerEvent &e);
 
   /**
+   * @brief generates new cmd vel based on current path (called by timerCmdVelGeneration method)
+   */
+  void generateCmdVel();
+
+  /**
    * @brief start the timer events for exploration
    */
   void startExploration();
@@ -94,7 +99,13 @@ public:
    *
    * @return shared pointer to hector planner instance
    */
-  boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> getPlanner() const { return planner_; }
+  const boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> getPlanner() const { return planner_; }
+
+  /**
+   * @brief updates robots odom for planner and path_finder members
+   * @param odom
+   */
+  void updateRobotOdom(const nav_msgs::OdometryConstPtr &odom);
 
   /**
    * @brief updates update_cmd_vel_functor_ member

@@ -161,7 +161,7 @@ add_executable(kth_stage_node
   src/frontier_analysis.cpp
   src/stage_interface.cpp
   src/utils.cpp
-)
+  )
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
