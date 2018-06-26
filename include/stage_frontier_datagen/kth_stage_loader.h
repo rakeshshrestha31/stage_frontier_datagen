@@ -30,10 +30,10 @@ class KTHStageLoader
 public:
   class floorplan_t {
   public:
-    floorplan_t(const floorplanGraph *_graph, cv::Mat _map, std::vector<cv::Point> _unobstructed_points) :
+    floorplan_t(floorplanGraph _graph, cv::Mat _map, std::vector<cv::Point> _unobstructed_points) :
       graph(_graph), map(_map), unobstructed_points(_unobstructed_points) {}
 
-    const floorplanGraph *graph;
+    floorplanGraph graph;
     cv::Mat map;
     std::vector<cv::Point> unobstructed_points;
   };

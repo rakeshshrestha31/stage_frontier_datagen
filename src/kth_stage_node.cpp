@@ -66,7 +66,6 @@ public:
     last_path_.header.stamp = ros::Time(0);
 
     kth_stage_loader_->loadDirectory(dataset_dir_);
-    floorplans_ = &(kth_stage_loader_->getFloorplans());
 
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
@@ -251,7 +250,7 @@ public:
    */
   void run()
   {
-    for (const KTHStageLoader::floorplan_t &floorplan: *floorplans_)
+    for (const KTHStageLoader::floorplan_t &floorplan: kth_stage_loader_->getFloorplans())
     {
       if (floorplan.unobstructed_points.empty())
       {
@@ -271,13 +270,13 @@ public:
       current_groundtruth_map_ = floorplan.map.clone();
       cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
 
-//      writeDebugMap(*(floorplan.graph), current_groundtruth_map_, floorplan.unobstructed_points, random_index);
+      writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
 
       std::string worldfile_directory(std::string(package_path_) + "/worlds/");
       std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
-        *(floorplan.graph), random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
+        floorplan.graph, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
-      runStageWorld(tmp_worldfile_name, *(floorplan.graph));
+      runStageWorld(tmp_worldfile_name, floorplan.graph);
 
       // TODO: remove it
       return;
@@ -377,7 +376,6 @@ protected:
   boost::shared_ptr<KTHStageLoader> kth_stage_loader_;
   boost::shared_ptr<SimpleExplorationController> exploration_controller_;
   std::string dataset_dir_;
-  const std::vector<KTHStageLoader::floorplan_t> *floorplans_;
 
   nav_msgs::Path last_path_;
   cv::Mat current_groundtruth_map_;
