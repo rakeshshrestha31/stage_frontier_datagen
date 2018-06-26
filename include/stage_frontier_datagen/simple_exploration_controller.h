@@ -19,7 +19,7 @@ namespace stage_frontier_datagen
 class SimpleExplorationController
 {
 public:
-  SimpleExplorationController(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor=0);
+  SimpleExplorationController(const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor=0);
 
   /**
    * @brief runs hector_navigation_planner methods to get navigation path based on exploration transform optimization
@@ -100,7 +100,7 @@ public:
    * @brief updates update_cmd_vel_functor_ member
    * @param update_cmd_vel_functor
    */
-  void updateCmdVelFunctor(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor);
+  void updateCmdVelFunctor(const boost::function<void(const geometry_msgs::Twist&)> &update_cmd_vel_functor);
 protected:
   boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner_;
@@ -111,7 +111,7 @@ protected:
   boost::function<void(const SimpleExplorationController&, bool)> plan_update_callback_;  ///< callback on plan update
 
   boost::mutex update_cmd_vel_functor_mutex_;
-  boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor_;
+  boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor_;
 
   ros::Publisher vel_pub_;
   ros::Publisher exploration_plan_pub_;

@@ -49,10 +49,11 @@ public:
    * @param argc commandline argument argc
    * @param argv commandline argument argv
    * @param worldfile location of worldfile
+   * @param sensor_callback callback functor on sensor update
    */
   StageInterface(int argc, char **argv,
-                 boost::shared_ptr<StepWorldGui> stage_world, const std::string &worldfile,
-                 const boost::function<int (sensor_msgs::LaserScanConstPtr, nav_msgs::OdometryConstPtr)> &sensor_callback);
+                 const boost::shared_ptr<StepWorldGui> &stage_world, const std::string &worldfile,
+                 const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback);
 
   /**
    * @brief adapted from stage_ros
@@ -69,13 +70,13 @@ public:
    * @brief updates the velocity of the robot (takes effect in the next laser callback for synchronization)
    * @param cmd_vel
    */
-  void updateCmdVel(geometry_msgs::Twist cmd_vel);
+  void updateCmdVel(const geometry_msgs::Twist &cmd_vel);
 
   /**
    * @brief stage callback for pose update (static because we need function pointer)
    * @param model stage pose model
    * @param stage_interface pointer to object of StageInterface
-   * @return
+   * @return 0 (indicates we want the callback to be called again)
    */
   static int poseUpdateCallback(Stg::Model *model, StageInterface *stage_interface);
 
@@ -83,14 +84,18 @@ public:
    * @brief stage callback for laser update (static because we need function pointer)
    * @param model stage pose model
    * @param stage_interface pointer to object of StageInterface
-   * @return
+   * @return 0 (indicates we want the callback to be called again)
    */
   static int laserUpdateCallback(Stg::Model *model, StageInterface *stage_interface);
 
-  boost::function<int (sensor_msgs::LaserScanConstPtr, nav_msgs::OdometryConstPtr)> sensor_callback_functor_;
 protected:
   // TODO: make the type of stage_world_ only World (to use without GUI)
   boost::shared_ptr<StepWorldGui> stage_world_;
+
+  /**
+   * @brief callback functor on sensor data update
+   */
+  boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr&)> sensor_callback_functor_;
 
   Stg::ModelRanger *laser_model_;
   Stg::ModelPosition *robot_model_;

@@ -7,8 +7,8 @@
 using namespace Stg;
 
 StageInterface::StageInterface(int argc, char **argv,
-                               boost::shared_ptr<StepWorldGui> stage_world, const std::string &worldfile,
-                               const boost::function<int (sensor_msgs::LaserScanConstPtr, nav_msgs::OdometryConstPtr)> &sensor_callback)
+                               const boost::shared_ptr<StepWorldGui> &stage_world, const std::string &worldfile,
+                               const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback)
   : stage_world_(stage_world),
     sensor_callback_functor_(sensor_callback),
     laser_scan_msg_(new sensor_msgs::LaserScan()),
@@ -58,7 +58,7 @@ geometry_msgs::TransformStamped StageInterface::getBaseLaserTf()
   return stamped_tf_msg;
 }
 
-void StageInterface::updateCmdVel(geometry_msgs::Twist cmd_vel)
+void StageInterface::updateCmdVel(const geometry_msgs::Twist &cmd_vel)
 {
   boost::mutex::scoped_lock lock(cmd_vel_mutex_);
   if (!cmd_vel_msgs_)

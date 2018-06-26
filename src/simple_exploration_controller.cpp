@@ -36,7 +36,7 @@
 
 namespace stage_frontier_datagen
 {
-SimpleExplorationController::SimpleExplorationController(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor)
+SimpleExplorationController::SimpleExplorationController(const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor)
   : update_cmd_vel_functor_(update_cmd_vel_functor),
     planner_(new hector_exploration_planner::HectorExplorationPlanner()),
     plan_update_callback_(0),
@@ -250,7 +250,7 @@ void SimpleExplorationController::clearCostmap()
   costmap_2d_ros_->resetLayers();
 }
 
-void SimpleExplorationController::updateCmdVelFunctor(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor)
+void SimpleExplorationController::updateCmdVelFunctor(const boost::function<void(const geometry_msgs::Twist&)> &update_cmd_vel_functor)
 {
   boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
   update_cmd_vel_functor_ = update_cmd_vel_functor;
