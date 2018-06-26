@@ -173,6 +173,13 @@ public:
     boost::function<int (Stg::Model*)> empty_functor = 0;
     stage_interface_.reset(new StageInterface(argc_, argv_, stage_world_, world_file_, empty_functor, empty_functor));
     reset_stage_world_ = false;
+
+    if (exploration_controller_)
+    {
+      exploration_controller_->updateCmdVelFunctor(
+        boost::bind(&StageInterface::updateCmdVel, stage_interface_, _1)
+      );
+    }
   }
 
   /**
@@ -230,7 +237,7 @@ public:
       do
       {
         stage_interface_->step();
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
       } while (true); // planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
 

@@ -13,6 +13,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/Odometry.h>
+#include <geometry_msgs/Twist.h>
 
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <tf/transform_broadcaster.h>
@@ -65,6 +66,12 @@ public:
   void step() { stage_world_->step(); }
 
   /**
+   * @brief updates the velocity of the robot (takes effect in the next laser callback for synchronization)
+   * @param cmd_vel
+   */
+  void updateCmdVel(geometry_msgs::Twist cmd_vel);
+
+  /**
    * @brief stage callback for pose update (static because we need function pointer)
    * @param model stage pose model
    * @param stage_interface pointer to object of StageInterface
@@ -89,11 +96,14 @@ protected:
   Stg::ModelRanger *laser_model_;
   Stg::ModelPosition *robot_model_;
 
+  boost::mutex laser_scan_mutex_;
   sensor_msgs::LaserScanPtr laser_scan_msg_;
+
+  boost::mutex odom_mutex_;
   nav_msgs::OdometryPtr odom_msg_;
 
-  boost::mutex laser_scan_mutex_;
-  boost::mutex odom_mutex_;
+  boost::mutex cmd_vel_mutex_;
+  geometry_msgs::TwistPtr cmd_vel_msgs_;
 
   // TODO: don't use publishers
   ros::Publisher laser_pub_;

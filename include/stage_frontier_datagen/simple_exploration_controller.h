@@ -12,13 +12,14 @@
 #include <nav_msgs/Path.h>
 
 #include <boost/shared_ptr.hpp>
+#include <boost/function.hpp>
 
 namespace stage_frontier_datagen
 {
 class SimpleExplorationController
 {
 public:
-  SimpleExplorationController();
+  SimpleExplorationController(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor=0);
 
   /**
    * @brief runs hector_navigation_planner methods to get navigation path based on exploration transform optimization
@@ -95,6 +96,11 @@ public:
    */
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> getPlanner() const { return planner_; }
 
+  /**
+   * @brief updates update_cmd_vel_functor_ member
+   * @param update_cmd_vel_functor
+   */
+  void updateCmdVelFunctor(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor);
 protected:
   boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner_;
@@ -103,6 +109,9 @@ protected:
   boost::mutex path_mutex_;
   boost::atomic_bool is_planner_running_;
   boost::function<void(const SimpleExplorationController&, bool)> plan_update_callback_;  ///< callback on plan update
+
+  boost::mutex update_cmd_vel_functor_mutex_;
+  boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor_;
 
   ros::Publisher vel_pub_;
   ros::Publisher exploration_plan_pub_;

@@ -36,8 +36,9 @@
 
 namespace stage_frontier_datagen
 {
-SimpleExplorationController::SimpleExplorationController()
-  : planner_(new hector_exploration_planner::HectorExplorationPlanner()),
+SimpleExplorationController::SimpleExplorationController(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor)
+  : update_cmd_vel_functor_(update_cmd_vel_functor),
+    planner_(new hector_exploration_planner::HectorExplorationPlanner()),
     plan_update_callback_(0),
     is_planner_initialized_(false),
     is_planner_running_(false),
@@ -73,7 +74,16 @@ void SimpleExplorationController::stopExploration()
 {
   exploration_plan_generation_timer_.stop();
   cmd_vel_generator_timer_.stop();
-  vel_pub_.publish(geometry_msgs::Twist());
+
+  geometry_msgs::Twist empty_vel;
+  vel_pub_.publish(empty_vel);
+  {
+    boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
+    if (update_cmd_vel_functor_)
+    {
+      update_cmd_vel_functor_(empty_vel);
+    }
+  }
 
   clearCostmap();
 
@@ -184,7 +194,16 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
     is_running = true;
 
     // empty twist while planning
-    vel_pub_.publish(geometry_msgs::Twist());
+    geometry_msgs::Twist empty_vel;
+    vel_pub_.publish(empty_vel);
+    {
+      boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
+      if (update_cmd_vel_functor_)
+      {
+        update_cmd_vel_functor_(empty_vel);
+      }
+    }
+
     if (!is_planner_running_)
     {
       updatePlan();
@@ -194,6 +213,13 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
   {
     // TODO: remove comment
     vel_pub_.publish(twist);
+    {
+      boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
+      if (update_cmd_vel_functor_)
+      {
+        update_cmd_vel_functor_(twist);
+      }
+    }
   }
 
   is_running = false;
@@ -222,5 +248,11 @@ void SimpleExplorationController::clearCostmap()
 
   boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros_->getCostmap()->getMutex()));
   costmap_2d_ros_->resetLayers();
+}
+
+void SimpleExplorationController::updateCmdVelFunctor(boost::function<void(geometry_msgs::Twist)> update_cmd_vel_functor)
+{
+  boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
+  update_cmd_vel_functor_ = update_cmd_vel_functor;
 }
 } // namespace stage_frontier_datagen

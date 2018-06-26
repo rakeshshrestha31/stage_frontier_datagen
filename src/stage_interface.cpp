@@ -59,6 +59,19 @@ geometry_msgs::TransformStamped StageInterface::getBaseLaserTf()
   return stamped_tf_msg;
 }
 
+void StageInterface::updateCmdVel(geometry_msgs::Twist cmd_vel)
+{
+  boost::mutex::scoped_lock lock(cmd_vel_mutex_);
+  if (!cmd_vel_msgs_)
+  {
+    cmd_vel_msgs_ = boost::make_shared<geometry_msgs::Twist>(cmd_vel);
+  }
+  else
+  {
+    *cmd_vel_msgs_ = cmd_vel;
+  }
+}
+
 int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_interface)
 {
   assert(stage_interface && model);
@@ -130,6 +143,17 @@ int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_inte
   boost::mutex::scoped_lock odom_lock(stage_interface->odom_mutex_);
   stage_interface->odom_msg_->header.stamp = stage_interface->laser_scan_msg_->header.stamp;
   stage_interface->odom_pub_.publish(stage_interface->odom_msg_);
+
+  // apply cmd_vel
+  boost::mutex::scoped_lock cmd_vel_lock(stage_interface->cmd_vel_mutex_);
+  if (stage_interface->cmd_vel_msgs_)
+  {
+    stage_interface->robot_model_->SetSpeed(
+      stage_interface->cmd_vel_msgs_->linear.x,
+      stage_interface->cmd_vel_msgs_->linear.y,
+      stage_interface->cmd_vel_msgs_->angular.z
+    );
+  }
 
   if (stage_interface->laser_callback_functor_)
   {
