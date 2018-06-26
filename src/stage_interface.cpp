@@ -61,6 +61,10 @@ geometry_msgs::TransformStamped StageInterface::getBaseLaserTf()
 
 int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_interface)
 {
+  assert(stage_interface && model);
+
+  boost::mutex::scoped_lock odom_lock(stage_interface->odom_mutex_);
+
   stage_interface->odom_msg_->header.stamp = ros::Time::now();
 
   stage_interface->odom_msg_->pose.pose.position.x = stage_interface->robot_model_->est_pose.x;
@@ -98,6 +102,7 @@ int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_inte
 {
   assert(stage_interface && model);
 
+  boost::mutex::scoped_lock laser_scan_lock(stage_interface->laser_scan_mutex_);
   stage_interface->laser_scan_msg_->header.stamp = ros::Time::now();
   const std::vector<Stg::ModelRanger::Sensor>& sensors = stage_interface->laser_model_->GetSensors();
 
@@ -122,6 +127,7 @@ int StageInterface::laserUpdateCallback(Model *model, StageInterface *stage_inte
   stage_interface->laser_pub_.publish(stage_interface->laser_scan_msg_);
 
   // sync odom message
+  boost::mutex::scoped_lock odom_lock(stage_interface->odom_mutex_);
   stage_interface->odom_msg_->header.stamp = stage_interface->laser_scan_msg_->header.stamp;
   stage_interface->odom_pub_.publish(stage_interface->odom_msg_);
 

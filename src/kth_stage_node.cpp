@@ -230,7 +230,7 @@ public:
       do
       {
         stage_interface_->step();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
       } while (true); // planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
 

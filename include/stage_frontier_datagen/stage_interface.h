@@ -5,13 +5,10 @@
 #ifndef STAGE_FRONTIER_DATAGEN_STAGE_INTERFACE_H
 #define STAGE_FRONTIER_DATAGEN_STAGE_INTERFACE_H
 
-/**
- * @brief interface for stage simulation
- * @details adapted from https://github.com/Voidminded/DQNStageROS
- */
 #include <stage.hh>
 #include <boost/function.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/thread/mutex.hpp>
 
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
@@ -20,6 +17,10 @@
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <tf/transform_broadcaster.h>
 
+/**
+ * @brief interface for stage simulation
+ * @details adapted from https://github.com/Voidminded/DQNStageROS and https://github.com/payamn/DeepRLMapCoverage
+ */
 class StageInterface
 {
 public:
@@ -90,6 +91,9 @@ protected:
 
   sensor_msgs::LaserScanPtr laser_scan_msg_;
   nav_msgs::OdometryPtr odom_msg_;
+
+  boost::mutex laser_scan_mutex_;
+  boost::mutex odom_mutex_;
 
   // TODO: don't use publishers
   ros::Publisher laser_pub_;
