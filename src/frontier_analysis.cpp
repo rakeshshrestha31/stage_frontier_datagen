@@ -166,40 +166,6 @@ cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size gro
   return resized_clipped_map;
 }
 
-tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
-                                               const nav_msgs::Odometry &odometry)
-{
-  auto robot_groundtruth_pose = utils::odometryMsgToTfStampedPose(odometry);
-
-  tf::Stamped<tf::Pose> robot_estimated_pose;
-//  costmap_2d_ros->getRobotPose(robot_estimated_pose);
-  if (!getRobotPose(costmap_2d_ros, robot_estimated_pose.frame_id_, robot_estimated_pose))
-  {
-    ROS_ERROR_THROTTLE(1.0, "Robot pose not availabe");
-    return tf::Transform::getIdentity();
-  }
-
-  // time offset between estimated pose and groundtruth pose
-  auto time_offset = robot_estimated_pose.stamp_.toSec() - robot_groundtruth_pose.stamp_.toSec();
-  if (time_offset > MAX_TIME_OFFSET_ESTIMATED_GROUNDTRUTH)
-  {
-    ROS_WARN_THROTTLE(1.0, "time offset between estimated and groundtruth pose is %f secs", time_offset);
-  }
-
-  auto transform_gt_est = robot_groundtruth_pose * robot_estimated_pose.inverse();
-  ROS_INFO_THROTTLE(
-    1.0, "offset: (%f, %f), %f",
-    transform_gt_est.getOrigin().getX(), transform_gt_est.getOrigin().getY(),
-    tf::getYaw(transform_gt_est.getRotation()) * 180 / M_PI
-  );
-
-  // TODO: fix this (the groundtruth pose from stage is funny, not synchronized!!!)
-  return tf::Transform::getIdentity();
-
-  // find transformation between estimated and groundtruth
-  return transform_gt_est;
-}
-
 cv::Mat getMapCenteringAffineTransformation(const boost::shared_ptr<costmap_2d::Costmap2D> static_costmap)
 {
   auto resolution = static_costmap->getResolution();
@@ -234,60 +200,6 @@ cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d
   // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
   return (cv::Mat_<double>(2, 3) <<   cos_rotation, -sin_rotation, translation_x,
                                       sin_rotation, cos_rotation, -translation_y);
-}
-
-bool transformPose(tf::Stamped<tf::Pose> source_pose,
-                   std::string target_frame_id,
-                   tf::Stamped<tf::Pose> &target_pose)
-{
-  static tf::TransformListener tf_listener;
-  try
-  {
-    tf_listener.transformPose(target_frame_id, source_pose, target_pose);
-  }
-  catch (tf::LookupException &ex)
-  {
-    ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
-    return false;
-  }
-  catch (tf::ConnectivityException &ex)
-  {
-    ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
-    return false;
-  }
-  catch (tf::ExtrapolationException &ex)
-  {
-    ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
-    return false;
-  }
-  return true;
-}
-
-bool getRobotPose(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
-                  std::string target_frame_id,
-                  tf::Stamped<tf::Pose> &global_pose)
-{
-
-  global_pose.setIdentity();
-  global_pose.frame_id_ = target_frame_id;
-
-  tf::Stamped < tf::Pose > robot_local_pose;
-  robot_local_pose.setIdentity();
-  robot_local_pose.frame_id_ = costmap_2d_ros->getBaseFrameID();
-  robot_local_pose.stamp_ = ros::Time();
-  ros::Time current_time = ros::Time::now();
-
-  transformPose(robot_local_pose, costmap_2d_ros->getGlobalFrameID(), global_pose);
-  // check global_pose timeout
-  if (current_time.toSec() - global_pose.stamp_.toSec() > TRANSFORM_TOLERANCE)
-  {
-    ROS_WARN_THROTTLE(1.0,
-                      "Costmap2DROS transform timeout. Current time: %.4f, global_pose stamp: %.4f, tolerance: %.4f",
-                      current_time.toSec(), global_pose.stamp_.toSec(), TRANSFORM_TOLERANCE);
-    return false;
-  }
-
-  return true;
 }
 
 cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
