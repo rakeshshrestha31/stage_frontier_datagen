@@ -25,6 +25,8 @@ window
   rotate [ 0  0 ]
 
   show_data 1              # 1=on 0=off
+
+  follow_model "r0"
 )
 
 # load an environment bitmap
