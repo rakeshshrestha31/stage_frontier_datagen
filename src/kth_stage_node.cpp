@@ -273,7 +273,7 @@ public:
 
       writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
 
-      std::string worldfile_directory(std::string(package_path_) + "/worlds/");
+      std::string worldfile_directory(std::string(package_path_) + "/worlds");
       std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
         floorplan.graph, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
       );
