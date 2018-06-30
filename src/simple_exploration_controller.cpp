@@ -46,8 +46,8 @@ SimpleExplorationController::SimpleExplorationController(const boost::function<v
   path_follower_.initialize(&tfl_);
 
   // TODO: update exploration plan a few waypoints before your previous plan will finish
-  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(1.0),
-                                                       &SimpleExplorationController::timerPlanExploration, this, false);
+//  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(1.0),
+//                                                       &SimpleExplorationController::timerPlanExploration, this, false);
 //  cmd_vel_generator_timer_ = nh_.createTimer(ros::Duration(0.1), &SimpleExplorationController::timerCmdVelGeneration,
 //                                            this, false);
 
@@ -104,8 +104,7 @@ bool SimpleExplorationController::updatePlan()
   }
 
   tf::Stamped<tf::Pose> robot_pose_tf;
-//  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
-  bool robot_pose_status = planner_->getRobotPose(robot_pose_tf);
+  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
 
   if (!robot_pose_status || robot_pose_tf.getRotation().length2() < 1e-5)
   {
@@ -170,6 +169,11 @@ bool SimpleExplorationController::updatePlan()
 }
 
 void SimpleExplorationController::timerPlanExploration(const ros::TimerEvent &e)
+{
+  planExploration();
+}
+
+void SimpleExplorationController::planExploration()
 {
   if (!is_planner_running_)
   {
@@ -264,16 +268,17 @@ void SimpleExplorationController::updateCmdVelFunctor(const boost::function<void
 
 void SimpleExplorationController::updateRobotOdom(const nav_msgs::OdometryConstPtr &odom)
 {
-  if (planner_)
+  if (planner_ && costmap_2d_ros_)
   {
-    planner_->setRobotOdom(odom);
+    costmap_2d_ros_->setRobotOdom(odom);
     path_follower_.setRobotOdom(odom);
+    costmap_2d_ros_;
   }
 }
 
 void SimpleExplorationController::initializeCostmap()
 {
-  costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("global_costmap", tfl_));
+  costmap_2d_ros_.reset(new hector_exploration_planner::CustomCostmap2DROS("global_costmap", tfl_));
 
   boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros_->getCostmap()->getMutex()));
   for (const auto &layer: *(costmap_2d_ros_->getLayeredCostmap()->getPlugins()))

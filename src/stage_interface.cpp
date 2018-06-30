@@ -89,15 +89,15 @@ int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_inter
   stage_interface->odom_msg_->twist.twist.angular.z = velocity.a;
 
   // TF broadcast
-  tf::Quaternion odomQ;
-  tf::quaternionMsgToTF(stage_interface->odom_msg_->pose.pose.orientation, odomQ);
-  tf::Transform txOdom(odomQ, tf::Point(stage_interface->odom_msg_->pose.pose.position.x, stage_interface->odom_msg_->pose.pose.position.y, 0.0));
-  stage_interface->tf_broadcaster_.sendTransform(tf::StampedTransform(
-    txOdom,
-    ros::Time::now(),
-    "odom",
-    "base_footprint"
-  ));
+//  tf::Quaternion odomQ;
+//  tf::quaternionMsgToTF(stage_interface->odom_msg_->pose.pose.orientation, odomQ);
+//  tf::Transform txOdom(odomQ, tf::Point(stage_interface->odom_msg_->pose.pose.position.x, stage_interface->odom_msg_->pose.pose.position.y, 0.0));
+//  stage_interface->tf_broadcaster_.sendTransform(tf::StampedTransform(
+//    txOdom,
+//    ros::Time::now(),
+//    "odom",
+//    "base_footprint"
+//  ));
 
   return 0;
 }

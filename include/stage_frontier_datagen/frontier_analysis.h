@@ -11,7 +11,7 @@
 
 #define MIN_FRONTIER_CLUSTER_SIZE 20
 
-#include <costmap_2d/costmap_2d_ros.h>
+#include <hector_exploration_planner/custom_costmap_2d_ros.h>
 #include <costmap_2d/static_layer.h>
 #include <nav_msgs/Odometry.h>
 #include <opencv2/core/core.hpp>
@@ -29,7 +29,7 @@ namespace frontier_analysis
  * @param desired_resolution
  * @return
  */
-cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros, double desired_resolution,
+cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros, double desired_resolution,
                const tf::Transform &transform_gt_est);
 
 
@@ -40,7 +40,7 @@ cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros
  * @param transform_gt_est
  * @return
  */
-cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                             const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses,
                             const tf::Transform &transform_gt_est);
 
@@ -65,7 +65,7 @@ cv::Mat thresholdCostmap(const cv::Mat &original_map);
  * @param odometry
  * @return transform from estimated coordinates to groundtruth coordinates
  */
-tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+tf::Transform getTransformGroundtruthEstimated(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                                                const nav_msgs::Odometry &odometry);
 
 /**
@@ -103,7 +103,7 @@ bool transformPose(tf::Stamped<tf::Pose> source_pose,
  * @param global_pose output pose
  * @return if the pose query was successful
  */
-bool getRobotPose(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+bool getRobotPose(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                   std::string target_frame_id,
                   tf::Stamped<tf::Pose> &global_pose);
 
@@ -115,7 +115,7 @@ bool getRobotPose(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_
  * @return
  */
 cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
-                                  const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
+                                  const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> costmap_2d_ros,
                                   double desired_resolution);
 
 /**
@@ -126,7 +126,7 @@ cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
  * @return
  */
 cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
-                                   const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                   const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                                    double desired_resolution);
 
 /**
@@ -137,7 +137,7 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
  * @return points in (cost)map coordinates
  */
 std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
-                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                              const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                                               const tf::Transform &transform_gt_est);
 
 /**

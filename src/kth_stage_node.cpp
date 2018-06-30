@@ -11,6 +11,8 @@
 #define STAGE_LOAD_SLEEP 3
 
 #define PLANNER_FAILURE_TOLERANCE 15 // 15e5
+// time interval to call planner (in simulation time)
+#define PLANNER_CALL_INTERVAL 15
 
 // std includes
 #include <random>
@@ -55,8 +57,9 @@ public:
       exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
       planner_failure_count_(0),
-      spin_thread_(&KTHStageNode::spin, this),
-      kth_stage_loader_(new KTHStageLoader())
+//      spin_thread_(&KTHStageNode::spin, this),
+      kth_stage_loader_(new KTHStageLoader()),
+      last_plan_time_(0)
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
     {
@@ -66,7 +69,10 @@ public:
     package_path_ = ros::package::getPath(PACKAGE_NAME);
     last_path_.header.stamp = ros::Time(0);
 
-    kth_stage_loader_->loadDirectory(dataset_dir_);
+    if (!kth_stage_loader_->loadDirectory(dataset_dir_))
+    {
+      ROS_ERROR("no valid floorplan");
+    }
 
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
@@ -172,7 +178,6 @@ public:
   void resetStageWorld()
   {
     ROS_INFO("Starting new stage world");
-    // TODO: proper functor
     stage_interface_ = boost::make_shared<StageInterface>(
       argc_, argv_, stage_world_, world_file_,
       boost::bind(&KTHStageNode::sensorsCallback, this, _1, _2)
@@ -211,7 +216,7 @@ public:
     while (reset_stage_world_);
     std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
 
-    ROS_INFO("Stepping into new stage world");
+    ROS_INFO_STREAM("Running floorplan: " << floorplan.m_property->floorname);
     // single step for initial messages
     stage_interface_->step();
     planner_status_ = true;
@@ -229,7 +234,8 @@ public:
       {
         stage_interface_->step();
         exploration_controller_->generateCmdVel();
-//        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        updatePlan();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         while (!is_latest_sensor_received_);
         is_latest_sensor_received_ = false;
@@ -279,8 +285,6 @@ public:
       );
       runStageWorld(tmp_worldfile_name, floorplan.graph);
 
-      // TODO: remove it
-      return;
       if (!ros::ok())
       {
         return;
@@ -344,6 +348,17 @@ public:
     return 0;
   }
 
+  void updatePlan()
+  {
+    double current_sim_time_sec = stage_world_->SimTimeNow() / 1e6;
+    if (current_sim_time_sec - last_plan_time_ > PLANNER_CALL_INTERVAL)
+    {
+      exploration_controller_->updatePlan();
+      last_plan_time_ = current_sim_time_sec;
+    }
+    // TODO: check how far it's away from last waypoint to see if it needs replanning
+  }
+
   /**
    * @brief function for ros spin (to be called as a thread). Stops spinning when planner isn't ready to avoid costmap updates
    */
@@ -396,7 +411,7 @@ protected:
 
   boost::thread spin_thread_;
   boost::atomic_bool planner_status_;
-  size_t planner_failure_count_;
+  boost::atomic_uint planner_failure_count_;
 
   boost::shared_ptr<StageInterface> stage_interface_;
   boost::shared_ptr<StageInterface::StepWorldGui> stage_world_;
@@ -404,6 +419,8 @@ protected:
   std::string world_file_;
   int argc_;
   char **argv_;
+
+  double last_plan_time_;
 
   /** @brief whether the latest sensor has been received (used for stepping stage world as soon as it's received */
   boost::atomic_bool is_latest_sensor_received_;
@@ -429,7 +446,7 @@ int main(int argc, char **argv)
 
   while (ros::ok())
   {
-    if (Fl::first_window())
+    if (Fl::first_window() && !kth_stage_node.isResetStageWorld())
     {
       Fl::wait();
     }
@@ -438,6 +455,7 @@ int main(int argc, char **argv)
     if (kth_stage_node.isResetStageWorld())
     {
       kth_stage_node.resetStageWorld();
+      std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
     }
 
   }
