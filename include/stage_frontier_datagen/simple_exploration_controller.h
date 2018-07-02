@@ -134,8 +134,8 @@ public:
    * @param laser_scan
    * @param odometry
    */
-  void updateCostmap(const sensor_msgs::LaserScanConstPtr &laser_scan,
-                     const nav_msgs::OdometryConstPtr &odometry)
+  inline void updateCostmap(const sensor_msgs::LaserScanConstPtr &laser_scan,
+                            const nav_msgs::OdometryConstPtr &odometry)
   {
     if (ground_truth_layer_)
     {
@@ -143,7 +143,7 @@ public:
     }
     if (costmap_2d_ros_)
     {
-      costmap_2d_ros_->updateMap();
+      costmap_2d_ros_->mapUpdateOnce();
     }
   }
 
