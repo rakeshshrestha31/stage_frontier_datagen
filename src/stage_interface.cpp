@@ -7,7 +7,7 @@
 using namespace Stg;
 
 StageInterface::StageInterface(int argc, char **argv,
-                               const boost::shared_ptr<StepWorldGui> &stage_world, const std::string &worldfile,
+                               const boost::shared_ptr<AbstractStepWorld> &stage_world, const std::string &worldfile,
                                const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback)
   : stage_world_(stage_world),
     sensor_callback_functor_(sensor_callback),

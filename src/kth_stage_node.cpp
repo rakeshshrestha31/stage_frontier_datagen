@@ -48,7 +48,7 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
-  KTHStageNode(int argc, char **argv, boost::shared_ptr<StageInterface::StepWorldGui> stage_world)
+  KTHStageNode(int argc, char **argv, boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world)
     : argc_(argc), argv_(argv),
       stage_world_(stage_world),
       reset_stage_world_(false),
@@ -414,7 +414,7 @@ protected:
   boost::atomic_uint planner_failure_count_;
 
   boost::shared_ptr<StageInterface> stage_interface_;
-  boost::shared_ptr<StageInterface::StepWorldGui> stage_world_;
+  boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world_;
   boost::atomic_bool reset_stage_world_;
   std::string world_file_;
   int argc_;
@@ -430,11 +430,27 @@ protected:
 
 int main(int argc, char **argv)
 {
+  const char *window_title = "Exploration Data Generator";
   XInitThreads();
   Stg::Init(&argc, &argv);
-  boost::shared_ptr<StageInterface::StepWorldGui> stage_world(new StageInterface::StepWorldGui(800, 700, "Exploration Data Generator"));
-
   ros::init(argc, argv, "kth_stage_node");
+
+  ros::NodeHandle nh("~");
+  bool is_gui;
+  nh.param("gui", is_gui, false);
+
+//  boost::shared_ptr<StageInterface::StepWorldGui> stage_world(new StageInterface::StepWorldGui(800, 700, "Exploration Data Generator"));
+  boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world;
+
+  if (is_gui)
+  {
+    stage_world.reset(static_cast<StageInterface::AbstractStepWorld*>(new StageInterface::StepWorldGui(800, 700, window_title)));
+  }
+  else
+  {
+    stage_world.reset(static_cast<StageInterface::AbstractStepWorld*>(new StageInterface::StepWorld(window_title)));
+  }
+
   srand(std::time(NULL));
 
 //  auto spin_thread = boost::thread(boost::bind(&ros::spin));
