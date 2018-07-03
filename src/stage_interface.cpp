@@ -38,6 +38,11 @@ StageInterface::StageInterface(int argc, char **argv,
   );
   static_tf_broadcaster_.sendTransform(identity_transform_msg);
 
+  // identity transform between map and odom
+  identity_transform_msg.child_frame_id = "odom";
+  identity_transform_msg.header.frame_id = "map";
+  static_tf_broadcaster_.sendTransform(identity_transform_msg);
+
   // TODO: no publishers
   ros::NodeHandle nh;
   laser_pub_ = nh.advertise<sensor_msgs::LaserScan>("base_scan", 10);
