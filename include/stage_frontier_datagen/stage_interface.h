@@ -110,6 +110,14 @@ public:
   void step() { stage_world_->step(); }
 
   /**
+   * @brief teleport robot to a pose
+   * @param x x-coordinates
+   * @param y y-coordinates
+   * @param a orientation
+   */
+  void setRobotPose(double x, double y, double a);
+
+  /**
    * @brief updates the velocity of the robot (takes effect in the next laser callback for synchronization)
    * @param cmd_vel
    */

@@ -298,6 +298,27 @@ void SimpleExplorationController::initializeCostmap()
   }
 }
 
+void SimpleExplorationController::resetCostmap()
+{
+  if (ground_truth_layer_)
+  {
+    ground_truth_layer_->reset();
+  }
+  else
+  {
+    ROS_WARN("Tried to reset unset ground truth layer");
+  }
+
+  if (costmap_2d_ros_)
+  {
+    costmap_2d_ros_->resetLayers();
+  }
+  else
+  {
+    ROS_WARN("Tried to reset unset costmap");
+  }
+}
+
 } // namespace stage_frontier_datagen
 
 #include <costmap_2d/costmap_layer.h>

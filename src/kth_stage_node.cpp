@@ -14,6 +14,8 @@
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
+#define NUM_RUNS_IN_ONE_MAP 100
+
 // std includes
 #include <random>
 #include <ctime>
@@ -194,12 +196,12 @@ public:
   }
 
   /**
-   * @brief run the stage with SLAM
+   *
    * @param worldfile world file for stage
+   * @param floorplan floorplan to load
    */
-  void runStageWorld(const std::string &worldfile, const floorplanGraph &floorplan)
+  void loadStageWorld(const std::string &worldfile, const floorplanGraph &floorplan)
   {
-    int pipe;
     auto metric_ratio = floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
     auto metric_width = (floorplan.m_property->maxx - floorplan.m_property->minx) * metric_ratio;
     auto metric_height = (floorplan.m_property->maxy - floorplan.m_property->miny) * metric_ratio;
@@ -217,6 +219,13 @@ public:
     std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
 
     ROS_INFO_STREAM("Running floorplan: " << floorplan.m_property->floorname);
+  }
+
+  /**
+   * @brief run the exploration in current stage world
+   */
+  void runStageWorld()
+  {
     // single step for initial messages
     stage_interface_->step();
     planner_status_ = true;
@@ -264,30 +273,47 @@ public:
         continue;
       }
 
-      size_t random_index = std::rand() % floorplan.unobstructed_points.size();
-      Point2D random_point_meters = convertMapCoordsToMeters(
-        Point2D(
-          floorplan.unobstructed_points.at(random_index).x,
-          floorplan.unobstructed_points.at(random_index).y
-        ),
-        MAP_SIZE,
-        MAP_RESOLUTION
-      );
-
-      current_groundtruth_map_ = floorplan.map.clone();
-      cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
-
-      writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
-
-      std::string worldfile_directory(std::string(package_path_) + "/worlds/");
-      std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
-        floorplan.graph, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
-      );
-      runStageWorld(tmp_worldfile_name, floorplan.graph);
-
-      if (!ros::ok())
+      // run in the same map a number of times
+      for (size_t floorplan_run_idx = 0; floorplan_run_idx < NUM_RUNS_IN_ONE_MAP; floorplan_run_idx++)
       {
-        return;
+        size_t random_index = std::rand() % floorplan.unobstructed_points.size();
+        Point2D random_point_meters = convertMapCoordsToMeters(
+          Point2D(
+            floorplan.unobstructed_points.at(random_index).x,
+            floorplan.unobstructed_points.at(random_index).y
+          ),
+          MAP_SIZE,
+          MAP_RESOLUTION
+        );
+
+        current_groundtruth_map_ = floorplan.map.clone();
+        cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
+
+        writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
+
+        std::string worldfile_directory(std::string(package_path_) + "/worlds/");
+        std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
+          floorplan.graph, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
+        );
+
+        if (floorplan_run_idx == 0)
+        {
+          loadStageWorld(tmp_worldfile_name, floorplan.graph);
+        }
+        else
+        {
+          stage_interface_->setRobotPose(
+            random_point_meters.x,random_point_meters.y, (double)(rand() % 360)
+          );
+        }
+
+        runStageWorld();
+
+
+        if (!ros::ok())
+        {
+          return;
+        }
       }
     }
   }

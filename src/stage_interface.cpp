@@ -51,7 +51,7 @@ StageInterface::StageInterface(int argc, char **argv,
 
 geometry_msgs::TransformStamped StageInterface::getBaseLaserTf()
 {
-  assert(robot_model_ & laser_model_);
+  assert(robot_model_ && laser_model_);
 
   Stg::Pose lp = laser_model_->GetPose();
   tf::Quaternion laserQ;
@@ -73,6 +73,18 @@ void StageInterface::updateCmdVel(const geometry_msgs::Twist &cmd_vel)
   else
   {
     *cmd_vel_msgs_ = cmd_vel;
+  }
+}
+
+void StageInterface::setRobotPose(double x, double y, double a)
+{
+  if (robot_model_)
+  {
+    robot_model_->SetPose(Stg::Pose(x, y, 0, a));
+  }
+  else
+  {
+    ROS_WARN("Tried to set pose on empty robot model");
   }
 }
 

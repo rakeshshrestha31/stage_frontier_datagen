@@ -88,6 +88,11 @@ public:
   void initializeCostmap();
 
   /**
+   * @brief resets (clears) the ground truth layer and the costmap
+   */
+  void resetCostmap();
+
+  /**
    * @brief updates robots odom for planner and path_finder members
    * @param odom
    */
