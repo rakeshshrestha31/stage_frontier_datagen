@@ -11,6 +11,10 @@
 #define STAGE_LOAD_SLEEP 3
 
 #define PLANNER_FAILURE_TOLERANCE 15 // 15e5
+// time interval to call planner (in simulation time)
+#define PLANNER_CALL_INTERVAL 15
+
+#define NUM_RUNS_IN_ONE_MAP 100
 
 // std includes
 #include <random>
@@ -46,17 +50,18 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
-  KTHStageNode(int argc, char **argv, boost::shared_ptr<StageInterface::StepWorldGui> stage_world)
+  KTHStageNode(int argc, char **argv, bool is_gui)
     : argc_(argc), argv_(argv),
-      stage_world_(stage_world),
+      is_gui_(is_gui),
       reset_stage_world_(false),
       is_latest_sensor_received_(false),
       private_nh_("~"),
       exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
       planner_failure_count_(0),
-      spin_thread_(&KTHStageNode::spin, this),
-      kth_stage_loader_(new KTHStageLoader())
+//      spin_thread_(&KTHStageNode::spin, this),
+      kth_stage_loader_(new KTHStageLoader()),
+      last_plan_time_(0)
   {
     if (!private_nh_.getParam("dataset_dir", dataset_dir_))
     {
@@ -66,7 +71,10 @@ public:
     package_path_ = ros::package::getPath(PACKAGE_NAME);
     last_path_.header.stamp = ros::Time(0);
 
-    kth_stage_loader_->loadDirectory(dataset_dir_);
+    if (!kth_stage_loader_->loadDirectory(dataset_dir_))
+    {
+      ROS_ERROR("no valid floorplan");
+    }
 
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
@@ -169,32 +177,54 @@ public:
     }
   }
 
-  void resetStageWorld()
+  /**
+   * @brief create new stage world for new world file
+   */
+  void createNewWorld()
   {
     ROS_INFO("Starting new stage world");
-    // TODO: proper functor
-    stage_interface_ = boost::make_shared<StageInterface>(
-      argc_, argv_, stage_world_, world_file_,
-      boost::bind(&KTHStageNode::sensorsCallback, this, _1, _2)
-    );
+
+    const char *window_title = "Exploration Data Generator";
+    if (is_gui_)
+    {
+      stage_world_.reset(new StageInterface::StepWorldGui(800, 700, window_title));
+    }
+    else
+    {
+      stage_world_.reset(new StageInterface::StepWorld(window_title));
+    }
+
+    stage_interface_.reset(new StageInterface(argc_, argv_, stage_world_, world_file_,
+                                              boost::bind(&KTHStageNode::sensorsCallback, this, _1, _2)));
+  }
+
+  void resetStageWorld()
+  {
+    // create new stage world
+    createNewWorld();
 
     reset_stage_world_ = false;
+
+    // create new exploration_controller
+    boost::shared_ptr<SimpleExplorationController> control_ptr(new SimpleExplorationController());
+    this->exploration_controller_ = control_ptr;
+    exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
     if (exploration_controller_)
     {
       exploration_controller_->updateCmdVelFunctor(
-        boost::bind(&StageInterface::updateCmdVel, stage_interface_, _1)
+          boost::bind(&StageInterface::updateCmdVel, stage_interface_, _1)
       );
     }
   }
 
   /**
-   * @brief run the stage with SLAM
+   *
    * @param worldfile world file for stage
+   * @param floorplan floorplan to load
    */
-  void runStageWorld(const std::string &worldfile, const floorplanGraph &floorplan)
+  void loadStageWorld(const std::string &worldfile, const floorplanGraph &floorplan)
   {
-    int pipe;
     auto metric_ratio = floorplan.m_property->real_distance / floorplan.m_property->pixel_distance;
     auto metric_width = (floorplan.m_property->maxx - floorplan.m_property->minx) * metric_ratio;
     auto metric_height = (floorplan.m_property->maxy - floorplan.m_property->miny) * metric_ratio;
@@ -207,11 +237,23 @@ public:
     private_nh_.setParam("global_costmap/ground_truth_layer/ymax", half_height + MAP_SIZE_CLEARANCE);
 
     world_file_ = worldfile;
+
+    //Single thread version
+//    this->resetStageWorld();
+
+    // Two thread version
     reset_stage_world_ = true;
     while (reset_stage_world_);
     std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
 
-    ROS_INFO("Stepping into new stage world");
+    ROS_INFO_STREAM("Running floorplan: " << floorplan.m_property->floorname);
+  }
+
+  /**
+   * @brief run the exploration in current stage world
+   */
+  void runStageWorld()
+  {
     // single step for initial messages
     stage_interface_->step();
     planner_status_ = true;
@@ -229,7 +271,8 @@ public:
       {
         stage_interface_->step();
         exploration_controller_->generateCmdVel();
-//        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        updatePlan();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         while (!is_latest_sensor_received_);
         is_latest_sensor_received_ = false;
@@ -258,32 +301,47 @@ public:
         continue;
       }
 
-      size_t random_index = std::rand() % floorplan.unobstructed_points.size();
-      Point2D random_point_meters = convertMapCoordsToMeters(
-        Point2D(
-          floorplan.unobstructed_points.at(random_index).x,
-          floorplan.unobstructed_points.at(random_index).y
-        ),
-        MAP_SIZE,
-        MAP_RESOLUTION
-      );
-
-      current_groundtruth_map_ = floorplan.map.clone();
-      cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
-
-      writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
-
-      std::string worldfile_directory(std::string(package_path_) + "/worlds");
-      std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
-        floorplan.graph, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
-      );
-      runStageWorld(tmp_worldfile_name, floorplan.graph);
-
-      // TODO: remove it
-      return;
-      if (!ros::ok())
+      // run in the same map a number of times
+      for (size_t floorplan_run_idx = 0; floorplan_run_idx < NUM_RUNS_IN_ONE_MAP; floorplan_run_idx++)
       {
-        return;
+        size_t random_index = std::rand() % floorplan.unobstructed_points.size();
+        Point2D random_point_meters = convertMapCoordsToMeters(
+          Point2D(
+            floorplan.unobstructed_points.at(random_index).x,
+            floorplan.unobstructed_points.at(random_index).y
+          ),
+          MAP_SIZE,
+          MAP_RESOLUTION
+        );
+
+        current_groundtruth_map_ = floorplan.map.clone();
+        cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
+
+        writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
+
+        std::string worldfile_directory(std::string(package_path_) + "/worlds/");
+        std::string tmp_worldfile_name = kth_stage_loader_->createWorldFile(
+          floorplan.graph, random_point_meters, worldfile_directory, std::string(TMP_FLOORPLAN_BITMAP)
+        );
+
+        if (floorplan_run_idx == 0)
+        {
+          loadStageWorld(tmp_worldfile_name, floorplan.graph);
+        }
+        else
+        {
+          stage_interface_->setRobotPose(
+            random_point_meters.x,random_point_meters.y, (double)(rand() % 360)
+          );
+        }
+
+        runStageWorld();
+
+
+        if (!ros::ok())
+        {
+          return;
+        }
       }
     }
   }
@@ -344,6 +402,17 @@ public:
     return 0;
   }
 
+  void updatePlan()
+  {
+    double current_sim_time_sec = stage_world_->SimTimeNow() / 1e6;
+    if (current_sim_time_sec - last_plan_time_ > PLANNER_CALL_INTERVAL)
+    {
+      exploration_controller_->updatePlan();
+      last_plan_time_ = current_sim_time_sec;
+    }
+    // TODO: check how far it's away from last waypoint to see if it needs replanning
+  }
+
   /**
    * @brief function for ros spin (to be called as a thread). Stops spinning when planner isn't ready to avoid costmap updates
    */
@@ -396,40 +465,52 @@ protected:
 
   boost::thread spin_thread_;
   boost::atomic_bool planner_status_;
-  size_t planner_failure_count_;
+  boost::atomic_uint planner_failure_count_;
 
   boost::shared_ptr<StageInterface> stage_interface_;
-  boost::shared_ptr<StageInterface::StepWorldGui> stage_world_;
+  boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world_;
   boost::atomic_bool reset_stage_world_;
   std::string world_file_;
   int argc_;
   char **argv_;
 
+  double last_plan_time_;
+
   /** @brief whether the latest sensor has been received (used for stepping stage world as soon as it's received */
   boost::atomic_bool is_latest_sensor_received_;
 
   std::string package_path_;
+
+  bool is_gui_;
 };
 
 int main(int argc, char **argv)
 {
   XInitThreads();
   Stg::Init(&argc, &argv);
-  boost::shared_ptr<StageInterface::StepWorldGui> stage_world(new StageInterface::StepWorldGui(800, 700, "Exploration Data Generator"));
-
   ros::init(argc, argv, "kth_stage_node");
+
+  ros::NodeHandle nh("~");
+  bool is_gui;
+  nh.param("gui", is_gui, false);
+
   srand(std::time(NULL));
 
 //  auto spin_thread = boost::thread(boost::bind(&ros::spin));
 //  spin_thread.detach();
 
-  KTHStageNode kth_stage_node(argc, argv, stage_world);
+  KTHStageNode kth_stage_node(argc, argv, is_gui);
+
+  // Single thread version
+//  kth_stage_node.run();
+
+  // Two thread version
   boost::thread run_thread(boost::bind(&KTHStageNode::run, &kth_stage_node));
   run_thread.detach();
 
   while (ros::ok())
   {
-    if (Fl::first_window())
+    if (Fl::first_window() && !kth_stage_node.isResetStageWorld())
     {
       Fl::wait();
     }
@@ -438,6 +519,7 @@ int main(int argc, char **argv)
     if (kth_stage_node.isResetStageWorld())
     {
       kth_stage_node.resetStageWorld();
+      std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
     }
 
   }

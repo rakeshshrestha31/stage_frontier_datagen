@@ -7,7 +7,7 @@
 using namespace Stg;
 
 StageInterface::StageInterface(int argc, char **argv,
-                               const boost::shared_ptr<StepWorldGui> &stage_world, const std::string &worldfile,
+                               const boost::shared_ptr<AbstractStepWorld> &stage_world, const std::string &worldfile,
                                const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback)
   : stage_world_(stage_world),
     sensor_callback_functor_(sensor_callback),
@@ -15,7 +15,18 @@ StageInterface::StageInterface(int argc, char **argv,
     odom_msg_(new nav_msgs::Odometry())
 {
   stage_world_->Load(worldfile);
+  updateModels();
+}
 
+void StageInterface::resetWorld(const std::string &worldfile)
+{
+  stage_world_->UnLoad();
+  stage_world_->Load(worldfile);
+  updateModels();
+}
+
+void StageInterface::updateModels()
+{
   robot_model_ = dynamic_cast<Stg::ModelPosition *>(stage_world_->GetModel("r0"));
   robot_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::poseUpdateCallback, (void*)this);
   robot_model_->Subscribe();
@@ -33,9 +44,14 @@ StageInterface::StageInterface(int argc, char **argv,
   // identity transform between base_link and base_footprint
   geometry_msgs::TransformStamped identity_transform_msg;
   tf::transformStampedTFToMsg(
-    tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_footprint", "base_link"),
-    identity_transform_msg
+      tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_footprint", "base_link"),
+      identity_transform_msg
   );
+  static_tf_broadcaster_.sendTransform(identity_transform_msg);
+
+  // identity transform between map and odom
+  identity_transform_msg.child_frame_id = "odom";
+  identity_transform_msg.header.frame_id = "map";
   static_tf_broadcaster_.sendTransform(identity_transform_msg);
 
   // TODO: no publishers
@@ -46,7 +62,7 @@ StageInterface::StageInterface(int argc, char **argv,
 
 geometry_msgs::TransformStamped StageInterface::getBaseLaserTf()
 {
-  assert(robot_model_ & laser_model_);
+  assert(robot_model_ && laser_model_);
 
   Stg::Pose lp = laser_model_->GetPose();
   tf::Quaternion laserQ;
@@ -71,6 +87,18 @@ void StageInterface::updateCmdVel(const geometry_msgs::Twist &cmd_vel)
   }
 }
 
+void StageInterface::setRobotPose(double x, double y, double a)
+{
+  if (robot_model_)
+  {
+    robot_model_->SetPose(Stg::Pose(x, y, 0, a));
+  }
+  else
+  {
+    ROS_WARN("Tried to set pose on empty robot model");
+  }
+}
+
 int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_interface)
 {
   assert(stage_interface && model);
@@ -89,15 +117,15 @@ int StageInterface::poseUpdateCallback(Model *model, StageInterface *stage_inter
   stage_interface->odom_msg_->twist.twist.angular.z = velocity.a;
 
   // TF broadcast
-  tf::Quaternion odomQ;
-  tf::quaternionMsgToTF(stage_interface->odom_msg_->pose.pose.orientation, odomQ);
-  tf::Transform txOdom(odomQ, tf::Point(stage_interface->odom_msg_->pose.pose.position.x, stage_interface->odom_msg_->pose.pose.position.y, 0.0));
-  stage_interface->tf_broadcaster_.sendTransform(tf::StampedTransform(
-    txOdom,
-    ros::Time::now(),
-    "odom",
-    "base_footprint"
-  ));
+//  tf::Quaternion odomQ;
+//  tf::quaternionMsgToTF(stage_interface->odom_msg_->pose.pose.orientation, odomQ);
+//  tf::Transform txOdom(odomQ, tf::Point(stage_interface->odom_msg_->pose.pose.position.x, stage_interface->odom_msg_->pose.pose.position.y, 0.0));
+//  stage_interface->tf_broadcaster_.sendTransform(tf::StampedTransform(
+//    txOdom,
+//    ros::Time::now(),
+//    "odom",
+//    "base_footprint"
+//  ));
 
   return 0;
 }

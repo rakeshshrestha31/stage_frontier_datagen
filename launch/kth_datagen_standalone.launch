@@ -1,28 +1,19 @@
 <launch>
     <!-- Argument to decide if you want to run the main node separately for debugging -->
     <arg name="run_main_node" default="false" />
-    <arg name="run_rviz" default="false" />
-    <arg name="run_gui" default="false" />
-    <arg name="dataset_dir" default="KTH_CampusValhallavagen_Floorplan_Dataset_RAW" />
-
     <arg name="laser_topic" default="base_scan" />
-    <arg name="main_node_name" value="$(anon kth_stage_node)" />
 
     <include file="$(find stage_frontier_datagen)/launch/configurations.launch">
-        <arg name="main_node_name" value="$(arg main_node_name)" />
+        <arg name="main_node_name" value="kth_stage_node" />
     </include>
 
-    <node pkg="stage_frontier_datagen" type="kth_stage_node" output="screen" name="$(arg main_node_name)"
-          if="$(arg run_main_node)">
-        <param name="dataset_dir" value="$(arg dataset_dir)" />
-        <param name="gui" value="$(arg run_gui)" />
-    </node>
+    <node pkg="stage_frontier_datagen" type="kth_stage_node" name="kth_stage_node" if="$(arg run_main_node)"/>
 
-    <node pkg="rviz" type="rviz" name="rviz"
-          args="-d $(find stage_frontier_datagen)/config/hector_exploration.rviz"
-          if="$(arg run_rviz)">
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find stage_frontier_datagen)/config/hector_exploration.rviz">
         <remap from="base_scan" to="$(arg laser_topic)" />
     </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="map_odom_tf" args="0 0 0 0 0 0 odom map 25" />
 
     <node pkg="hector_driving_aid_markers" type="hector_driving_aid_markers_node" name="hector_driving_aid_markers" output="screen">
         <param name="left_side_y_outer" value="0.205"/>

@@ -7,6 +7,7 @@
 
 #include <ros/ros.h>
 #include <hector_exploration_planner/hector_exploration_planner.h>
+#include <hector_exploration_planner/custom_costmap_2d_ros.h>
 #include <costmap_2d/costmap_2d_ros.h>
 #include <hector_path_follower/hector_path_follower.h>
 #include <nav_msgs/Path.h>
@@ -34,6 +35,11 @@ public:
    * @param e reference to ROS Timer Event that was used to invoke the method
    */
   void timerPlanExploration(const ros::TimerEvent &e);
+
+  /**
+   * @brief generates new plan based on current path (called by timerPlanExploration method)
+   */
+  void planExploration();
 
   /**
    * @brief timer callback function to publish command velocity
@@ -82,6 +88,11 @@ public:
   void initializeCostmap();
 
   /**
+   * @brief resets (clears) the ground truth layer and the costmap
+   */
+  void resetCostmap();
+
+  /**
    * @brief updates robots odom for planner and path_finder members
    * @param odom
    */
@@ -112,7 +123,10 @@ public:
    *
    * @return costmap being used for planning
    */
-  const boost::shared_ptr<costmap_2d::Costmap2DROS> getCostmap2DROS() const { return costmap_2d_ros_; }
+  const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> getCostmap2DROS() const
+  {
+    return costmap_2d_ros_;
+  }
 
   /**
    *
@@ -125,17 +139,21 @@ public:
    * @param laser_scan
    * @param odometry
    */
-  void updateCostmap(const sensor_msgs::LaserScanConstPtr &laser_scan,
-                     const nav_msgs::OdometryConstPtr &odometry)
+  inline void updateCostmap(const sensor_msgs::LaserScanConstPtr &laser_scan,
+                            const nav_msgs::OdometryConstPtr &odometry)
   {
     if (ground_truth_layer_)
     {
       ground_truth_layer_->updateMap(laser_scan, odometry);
     }
+    if (costmap_2d_ros_)
+    {
+      costmap_2d_ros_->mapUpdateOnce();
+    }
   }
 
 protected:
-  boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros_;
+  boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> costmap_2d_ros_;
   boost::shared_ptr<ground_truth_layer::GroundTruthLayer> ground_truth_layer_;
 
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner_;

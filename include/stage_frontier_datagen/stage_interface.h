@@ -26,19 +26,65 @@ class StageInterface
 {
 public:
   /**
+   * @brief abstract interface for stepped world
+   */
+  class AbstractStepWorld
+  {
+  public:
+    AbstractStepWorld() = default;
+    virtual ~AbstractStepWorld() = default;
+    /**
+     * @brief method to step through the world
+     */
+    virtual void step() = 0;
+
+    virtual bool Load(const std::string &worldfile_path) = 0;
+    virtual void UnLoad() = 0;
+    virtual Stg::Model *GetModel(const std::string &name) const = 0;
+    virtual Stg::usec_t SimTimeNow(void) const = 0;
+  };
+
+  /**
+   * @brief Stage World supporting stepped execution
+   */
+  class StepWorld : public AbstractStepWorld, public Stg::World
+  {
+  public:
+    using World::World;
+    virtual ~StepWorld() {};
+
+    virtual bool Load(const std::string &worldfile_path) { World::Load(worldfile_path); };
+    virtual void UnLoad() { World::UnLoad(); };
+    virtual Stg::Model *GetModel(const std::string &name) const { World::GetModel(name); };
+    virtual Stg::usec_t SimTimeNow(void) const { World::SimTimeNow(); };
+
+    virtual void step()
+    {
+      World::Stop();
+      World::Update();
+    }
+  };
+
+  /**
    * @brief Stage World GUI supporting stepped execution
    * @todo make it general to use without GUI
    */
-  class StepWorldGui : public Stg::WorldGui
+  class StepWorldGui : public AbstractStepWorld, public Stg::WorldGui
   {
   public:
+    StepWorldGui(int width, int height, const char *caption) : Stg::WorldGui(width, height, caption) {}
     using WorldGui::WorldGui;
+
+    virtual bool Load(const std::string &worldfile_path) { WorldGui::Load(worldfile_path); };
+    virtual void UnLoad() { WorldGui::UnLoad(); };
+    virtual Stg::Model *GetModel(const std::string &name) const { WorldGui::GetModel(name); };
+    virtual Stg::usec_t SimTimeNow(void) const { WorldGui::SimTimeNow(); };
 
     void step()
     {
-      Stop();
+      WorldGui::Stop();
       Fl::lock();
-      World::Update();
+      WorldGui::Update();
       Fl::unlock();
       Fl::awake();
     }
@@ -52,8 +98,14 @@ public:
    * @param sensor_callback callback functor on sensor update
    */
   StageInterface(int argc, char **argv,
-                 const boost::shared_ptr<StepWorldGui> &stage_world, const std::string &worldfile,
+                 const boost::shared_ptr<AbstractStepWorld> &stage_world, const std::string &worldfile,
                  const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback);
+
+  /**
+   * @brief reset the StageInterface with another new world file
+   * @param worldfile  path of the new world file
+   */
+  void resetWorld(const std::string &worldfile);
 
   /**
    * @brief adapted from stage_ros
@@ -65,6 +117,14 @@ public:
    * @brief step the world by iteration
    */
   void step() { stage_world_->step(); }
+
+  /**
+   * @brief teleport robot to a pose
+   * @param x x-coordinates
+   * @param y y-coordinates
+   * @param a orientation
+   */
+  void setRobotPose(double x, double y, double a);
 
   /**
    * @brief updates the velocity of the robot (takes effect in the next laser callback for synchronization)
@@ -89,8 +149,13 @@ public:
   static int laserUpdateCallback(Stg::Model *model, StageInterface *stage_interface);
 
 protected:
+  /**
+   * @brief update member variable/models based on new world
+   */
+  void updateModels();
+
   // TODO: make the type of stage_world_ only World (to use without GUI)
-  boost::shared_ptr<StepWorldGui> stage_world_;
+  boost::shared_ptr<AbstractStepWorld> stage_world_;
 
   /**
    * @brief callback functor on sensor data update
