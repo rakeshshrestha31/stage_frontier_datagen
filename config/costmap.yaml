@@ -18,6 +18,8 @@ global_costmap:
   static_map: true
   rolling_window: false
 
+  track_unknown_space: true
+
   #Investigate what this actually does
   cost_scaling_factor: 10.0
 

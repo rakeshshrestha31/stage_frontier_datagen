@@ -10,7 +10,7 @@
 
 #define STAGE_LOAD_SLEEP 3
 
-#define PLANNER_FAILURE_TOLERANCE 15 // 15e5
+#define PLANNER_FAILURE_TOLERANCE 2 // 15 // 15e5
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
