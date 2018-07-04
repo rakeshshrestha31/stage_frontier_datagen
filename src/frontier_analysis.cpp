@@ -10,6 +10,8 @@
 #include <stage_frontier_datagen/frontier_analysis.h>
 #include <stage_frontier_datagen/utils.h>
 
+#include <hector_exploration_planner/custom_costmap_2d_ros.h>
+
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -31,7 +33,7 @@ namespace stage_frontier_datagen
 namespace frontier_analysis
 {
 
-cv::Mat getMap(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros, double desired_resolution,
+cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros, double desired_resolution,
                const tf::Transform &transform_gt_est)
 {
   cv::Mat map;
@@ -92,7 +94,7 @@ cv::Mat thresholdCostmap(const cv::Mat &original_map)
   return thresholded_map;
 }
 
-cv::Mat getBoundingBoxImage(const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                             const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses,
                             const tf::Transform &transform_gt_est)
 {
@@ -203,7 +205,7 @@ cv::Mat getMapGroundtruthAffineTransformation(const boost::shared_ptr<costmap_2d
 }
 
 cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
-                                  const boost::shared_ptr<costmap_2d::Costmap2DROS> costmap_2d_ros,
+                                  const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> costmap_2d_ros,
                                   double desired_resolution)
 {
   auto costmap = costmap_2d_ros->getCostmap();
@@ -221,7 +223,7 @@ cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
 }
 
 cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
-                                   const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                   const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                                    double desired_resolution)
 {
   auto costmap = costmap_2d_ros->getCostmap();
@@ -243,7 +245,7 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
 }
 
 std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
-                                              const boost::shared_ptr<costmap_2d::Costmap2DROS> &costmap_2d_ros,
+                                              const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                                               const tf::Transform &transform_gt_est)
 {
   auto costmap = costmap_2d_ros->getCostmap();
