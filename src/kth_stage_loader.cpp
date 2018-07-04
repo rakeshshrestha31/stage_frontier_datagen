@@ -27,7 +27,7 @@ int KTHStageLoader::loadDirectory(std::string dataset_dir)
   for (const auto &graph: floorplan_graphs)
   {
     if (!graph.m_vertices.empty()
-        && !graph.m_edges.empty()
+//        && !graph.m_edges.empty()
         && graph.m_property->floorname.find("conflicted") == std::string::npos
         && graph.m_property->centroid.x != -1
         && graph.m_property->centroid.y != -1)
@@ -61,42 +61,57 @@ std::vector<cv::Point> KTHStageLoader::getUnobstructedPoints(const floorplanGrap
   std::vector<cv::Point> unobstructed_points;
 
   BGL_FORALL_VERTICES(v, graph, floorplanGraph)
-  {
-    // space represents room, corridors etc
-    auto space = graph[v];
-
-    // transform to map coordinates
-    auto min_point_map = floorplan::GraphFileOperations::transformToMapCoords(
-      graph, Point2D(space.minx, space.miny), MAP_SIZE, MAP_RESOLUTION
-    );
-
-    auto max_point_map = floorplan::GraphFileOperations::transformToMapCoords(
-      graph, Point2D(space.maxx, space.maxy), MAP_SIZE, MAP_RESOLUTION
-    );
-
-    cv::Mat space_mat = inflated_map
-      .rowRange((int)min_point_map.y, (int)max_point_map.y)
-      .colRange((int)min_point_map.x, (int)max_point_map.x);
-
-    std::vector<cv::Point> unobstructed_points_in_space;
-    // TODO: find a better way to find non-zero, without doing it twice
-    if (cv::countNonZero(space_mat))
     {
-      cv::findNonZero(space_mat, unobstructed_points_in_space);
-    }
+      // space represents room, corridors etc
+      auto space = graph[v];
 
-    // apply the offset to get in map coordinates
-    for (auto &unobstructed_point: unobstructed_points_in_space)
-    {
-      unobstructed_point.x += min_point_map.x;
-      unobstructed_point.y += min_point_map.y;
-    }
+      if (space.roomLayout.size() <= 0)
+        continue;
 
-    unobstructed_points.insert(
-      unobstructed_points.end(),
-      unobstructed_points_in_space.begin(), unobstructed_points_in_space.end()
-    );
-  }
+      // transform to map coordinates
+      auto min_point_map = floorplan::GraphFileOperations::transformToMapCoords(
+          graph, Point2D(space.minx, space.miny), MAP_SIZE, MAP_RESOLUTION
+      );
+
+      auto max_point_map = floorplan::GraphFileOperations::transformToMapCoords(
+          graph, Point2D(space.maxx, space.maxy), MAP_SIZE, MAP_RESOLUTION
+      );
+
+      // judge if the max_point and min_point is valid
+      if(max_point_map.x <= 0 || max_point_map.y <=0 || min_point_map.x >= inflated_map.size().width
+         || min_point_map.y >= inflated_map.size().height)
+        continue;
+
+      // crop the range of max_point and min_point if it is valid
+      min_point_map.x = std::max(0.0, min_point_map.x);
+      min_point_map.y = std::max(0.0, min_point_map.y);
+
+      max_point_map.x = std::min(double(inflated_map.size().width), max_point_map.x);
+      max_point_map.y = std::min(double(inflated_map.size().height), max_point_map.y);
+
+      std::vector<cv::Point> unobstructed_points_in_space;
+
+      cv::Mat space_mat = inflated_map
+          .rowRange((int)min_point_map.y, (int)max_point_map.y)
+          .colRange((int)min_point_map.x, (int)max_point_map.x);
+
+      // TODO: find a better way to find non-zero, without doing it twice
+      if (cv::countNonZero(space_mat)) {
+        cv::findNonZero(space_mat, unobstructed_points_in_space);
+      }
+
+      // apply the offset to get in map coordinates
+      for (auto &unobstructed_point: unobstructed_points_in_space)
+      {
+        unobstructed_point.x += min_point_map.x;
+        unobstructed_point.y += min_point_map.y;
+      }
+
+      unobstructed_points.insert(
+          unobstructed_points.end(),
+          unobstructed_points_in_space.begin(), unobstructed_points_in_space.end()
+      );
+    }
 
   return unobstructed_points;
 }

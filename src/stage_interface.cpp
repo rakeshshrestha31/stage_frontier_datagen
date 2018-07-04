@@ -15,7 +15,18 @@ StageInterface::StageInterface(int argc, char **argv,
     odom_msg_(new nav_msgs::Odometry())
 {
   stage_world_->Load(worldfile);
+  updateModels();
+}
 
+void StageInterface::resetWorld(const std::string &worldfile)
+{
+  stage_world_->UnLoad();
+  stage_world_->Load(worldfile);
+  updateModels();
+}
+
+void StageInterface::updateModels()
+{
   robot_model_ = dynamic_cast<Stg::ModelPosition *>(stage_world_->GetModel("r0"));
   robot_model_->AddCallback(Model::CB_UPDATE, (model_callback_t)StageInterface::poseUpdateCallback, (void*)this);
   robot_model_->Subscribe();
@@ -33,8 +44,8 @@ StageInterface::StageInterface(int argc, char **argv,
   // identity transform between base_link and base_footprint
   geometry_msgs::TransformStamped identity_transform_msg;
   tf::transformStampedTFToMsg(
-    tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_footprint", "base_link"),
-    identity_transform_msg
+      tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_footprint", "base_link"),
+      identity_transform_msg
   );
   static_tf_broadcaster_.sendTransform(identity_transform_msg);
 

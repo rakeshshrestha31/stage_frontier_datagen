@@ -39,6 +39,7 @@ public:
     virtual void step() = 0;
 
     virtual bool Load(const std::string &worldfile_path) = 0;
+    virtual void UnLoad() = 0;
     virtual Stg::Model *GetModel(const std::string &name) const = 0;
     virtual Stg::usec_t SimTimeNow(void) const = 0;
   };
@@ -53,6 +54,7 @@ public:
     virtual ~StepWorld() {};
 
     virtual bool Load(const std::string &worldfile_path) { World::Load(worldfile_path); };
+    virtual void UnLoad() { World::UnLoad(); };
     virtual Stg::Model *GetModel(const std::string &name) const { World::GetModel(name); };
     virtual Stg::usec_t SimTimeNow(void) const { World::SimTimeNow(); };
 
@@ -74,6 +76,7 @@ public:
     using WorldGui::WorldGui;
 
     virtual bool Load(const std::string &worldfile_path) { WorldGui::Load(worldfile_path); };
+    virtual void UnLoad() { WorldGui::UnLoad(); };
     virtual Stg::Model *GetModel(const std::string &name) const { WorldGui::GetModel(name); };
     virtual Stg::usec_t SimTimeNow(void) const { WorldGui::SimTimeNow(); };
 
@@ -97,6 +100,12 @@ public:
   StageInterface(int argc, char **argv,
                  const boost::shared_ptr<AbstractStepWorld> &stage_world, const std::string &worldfile,
                  const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback);
+
+  /**
+   * @brief reset the StageInterface with another new world file
+   * @param worldfile  path of the new world file
+   */
+  void resetWorld(const std::string &worldfile);
 
   /**
    * @brief adapted from stage_ros
@@ -140,6 +149,11 @@ public:
   static int laserUpdateCallback(Stg::Model *model, StageInterface *stage_interface);
 
 protected:
+  /**
+   * @brief update member variable/models based on new world
+   */
+  void updateModels();
+
   // TODO: make the type of stage_world_ only World (to use without GUI)
   boost::shared_ptr<AbstractStepWorld> stage_world_;
 
