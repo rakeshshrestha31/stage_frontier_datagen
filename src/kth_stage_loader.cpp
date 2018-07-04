@@ -77,23 +77,24 @@ std::vector<cv::Point> KTHStageLoader::getUnobstructedPoints(const floorplanGrap
           graph, Point2D(space.maxx, space.maxy), MAP_SIZE, MAP_RESOLUTION
       );
 
+      cv::Point min_point = cv::Point((int)min_point_map.x, (int)min_point_map.y);
+      cv::Point max_point = cv::Point((int)max_point_map.x, (int)max_point_map.y);
+
       // judge if the max_point and min_point is valid
-      if(max_point_map.x <= 0 || max_point_map.y <=0 || min_point_map.x >= inflated_map.size().width
-         || min_point_map.y >= inflated_map.size().height)
+      if(max_point.x <= 0 || max_point.y <=0 || min_point.x >= inflated_map.size().width
+         || min_point.y >= inflated_map.size().height)
         continue;
 
       // crop the range of max_point and min_point if it is valid
-      min_point_map.x = std::max(0.0, min_point_map.x);
-      min_point_map.y = std::max(0.0, min_point_map.y);
-
-      max_point_map.x = std::min(double(inflated_map.size().width), max_point_map.x);
-      max_point_map.y = std::min(double(inflated_map.size().height), max_point_map.y);
+      min_point = cv::Point(std::max(0, min_point.x), std::max(0, min_point.y));
+      max_point = cv::Point(std::min(inflated_map.size().width, max_point.x),
+                            std::min(inflated_map.size().height, max_point.y));
 
       std::vector<cv::Point> unobstructed_points_in_space;
 
       cv::Mat space_mat = inflated_map
-          .rowRange((int)min_point_map.y, (int)max_point_map.y)
-          .colRange((int)min_point_map.x, (int)max_point_map.x);
+          .rowRange(min_point.y, max_point.y)
+          .colRange(min_point.x, max_point.x);
 
       // TODO: find a better way to find non-zero, without doing it twice
       if (cv::countNonZero(space_mat)) {
@@ -103,8 +104,8 @@ std::vector<cv::Point> KTHStageLoader::getUnobstructedPoints(const floorplanGrap
       // apply the offset to get in map coordinates
       for (auto &unobstructed_point: unobstructed_points_in_space)
       {
-        unobstructed_point.x += min_point_map.x;
-        unobstructed_point.y += min_point_map.y;
+        unobstructed_point.x += min_point.x;
+        unobstructed_point.y += min_point.y;
       }
 
       unobstructed_points.insert(
