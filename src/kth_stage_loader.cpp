@@ -27,7 +27,7 @@ int KTHStageLoader::loadDirectory(std::string dataset_dir)
   for (const auto &graph: floorplan_graphs)
   {
     if (!graph.m_vertices.empty()
-        && !graph.m_edges.empty()
+//        && !graph.m_edges.empty()
         && graph.m_property->floorname.find("conflicted") == std::string::npos
         && graph.m_property->centroid.x != -1
         && graph.m_property->centroid.y != -1)

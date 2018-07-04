@@ -50,9 +50,9 @@ using namespace stage_frontier_datagen;
 class KTHStageNode
 {
 public:
-  KTHStageNode(int argc, char **argv, boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world)
+  KTHStageNode(int argc, char **argv, bool is_gui)
     : argc_(argc), argv_(argv),
-      stage_world_(stage_world),
+      is_gui_(is_gui),
       reset_stage_world_(false),
       is_latest_sensor_received_(false),
       private_nh_("~"),
@@ -177,20 +177,43 @@ public:
     }
   }
 
-  void resetStageWorld()
+  /**
+   * @brief create new stage world for new world file
+   */
+  void createNewWorld()
   {
     ROS_INFO("Starting new stage world");
-    stage_interface_ = boost::make_shared<StageInterface>(
-      argc_, argv_, stage_world_, world_file_,
-      boost::bind(&KTHStageNode::sensorsCallback, this, _1, _2)
-    );
+
+    const char *window_title = "Exploration Data Generator";
+    if (is_gui_)
+    {
+      stage_world_.reset(new StageInterface::StepWorldGui(800, 700, window_title));
+    }
+    else
+    {
+      stage_world_.reset(new StageInterface::StepWorld(window_title));
+    }
+
+    stage_interface_.reset(new StageInterface(argc_, argv_, stage_world_, world_file_,
+                                              boost::bind(&KTHStageNode::sensorsCallback, this, _1, _2)));
+  }
+
+  void resetStageWorld()
+  {
+    // create new stage world
+    createNewWorld();
 
     reset_stage_world_ = false;
+
+    // create new exploration_controller
+    boost::shared_ptr<SimpleExplorationController> control_ptr(new SimpleExplorationController());
+    this->exploration_controller_ = control_ptr;
+    exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
 
     if (exploration_controller_)
     {
       exploration_controller_->updateCmdVelFunctor(
-        boost::bind(&StageInterface::updateCmdVel, stage_interface_, _1)
+          boost::bind(&StageInterface::updateCmdVel, stage_interface_, _1)
       );
     }
   }
@@ -214,6 +237,11 @@ public:
     private_nh_.setParam("global_costmap/ground_truth_layer/ymax", half_height + MAP_SIZE_CLEARANCE);
 
     world_file_ = worldfile;
+
+    //Single thread version
+//    this->resetStageWorld();
+
+    // Two thread version
     reset_stage_world_ = true;
     while (reset_stage_world_);
     std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
@@ -452,11 +480,12 @@ protected:
   boost::atomic_bool is_latest_sensor_received_;
 
   std::string package_path_;
+
+  bool is_gui_;
 };
 
 int main(int argc, char **argv)
 {
-  const char *window_title = "Exploration Data Generator";
   XInitThreads();
   Stg::Init(&argc, &argv);
   ros::init(argc, argv, "kth_stage_node");
@@ -465,24 +494,17 @@ int main(int argc, char **argv)
   bool is_gui;
   nh.param("gui", is_gui, false);
 
-//  boost::shared_ptr<StageInterface::StepWorldGui> stage_world(new StageInterface::StepWorldGui(800, 700, "Exploration Data Generator"));
-  boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world;
-
-  if (is_gui)
-  {
-    stage_world.reset(static_cast<StageInterface::AbstractStepWorld*>(new StageInterface::StepWorldGui(800, 700, window_title)));
-  }
-  else
-  {
-    stage_world.reset(static_cast<StageInterface::AbstractStepWorld*>(new StageInterface::StepWorld(window_title)));
-  }
-
   srand(std::time(NULL));
 
 //  auto spin_thread = boost::thread(boost::bind(&ros::spin));
 //  spin_thread.detach();
 
-  KTHStageNode kth_stage_node(argc, argv, stage_world);
+  KTHStageNode kth_stage_node(argc, argv, is_gui);
+
+  // Single thread version
+//  kth_stage_node.run();
+
+  // Two thread version
   boost::thread run_thread(boost::bind(&KTHStageNode::run, &kth_stage_node));
   run_thread.detach();
 
