@@ -271,7 +271,12 @@ public:
       {
         stage_interface_->step();
         exploration_controller_->generateCmdVel();
-        updatePlan();
+
+        // don't update the plan in the middle of execution of another one. The planner takes a long time, hence the by
+        // the time planner is done, the robot would have moved significant distance and the plan is no longer starting
+        // from the robot's current position
+//        updatePlan();
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         while (!is_latest_sensor_received_);
@@ -395,6 +400,7 @@ public:
 
   int sensorsCallback(const sensor_msgs::LaserScanConstPtr &laser_scan, const nav_msgs::OdometryConstPtr &odom)
   {
+    boost::mutex::scoped_lock lock(sensor_callback_mutex_);
     exploration_controller_->updateRobotOdom(odom);
     exploration_controller_->updateCostmap(laser_scan, odom);
     is_latest_sensor_received_ = true;
@@ -476,6 +482,7 @@ protected:
 
   double last_plan_time_;
 
+  boost::mutex sensor_callback_mutex_;
   /** @brief whether the latest sensor has been received (used for stepping stage world as soon as it's received */
   boost::atomic_bool is_latest_sensor_received_;
 

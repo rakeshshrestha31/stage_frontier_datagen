@@ -272,13 +272,12 @@ void SimpleExplorationController::updateRobotOdom(const nav_msgs::OdometryConstP
   {
     costmap_2d_ros_->setRobotOdom(odom);
     path_follower_.setRobotOdom(odom);
-    costmap_2d_ros_;
   }
 }
 
 void SimpleExplorationController::initializeCostmap()
 {
-  costmap_2d_ros_.reset(new hector_exploration_planner::CustomCostmap2DROS("global_costmap", tfl_));
+  costmap_2d_ros_.reset(new hector_exploration_planner::CustomCostmap2DROS("global_costmap", tfl_, false));
 
   boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros_->getCostmap()->getMutex()));
   for (const auto &layer: *(costmap_2d_ros_->getLayeredCostmap()->getPlugins()))
