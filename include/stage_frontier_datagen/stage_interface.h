@@ -53,10 +53,10 @@ public:
     using World::World;
     virtual ~StepWorld() {};
 
-    virtual bool Load(const std::string &worldfile_path) { World::Load(worldfile_path); };
+    virtual bool Load(const std::string &worldfile_path) { return World::Load(worldfile_path); };
     virtual void UnLoad() { World::UnLoad(); };
-    virtual Stg::Model *GetModel(const std::string &name) const { World::GetModel(name); };
-    virtual Stg::usec_t SimTimeNow(void) const { World::SimTimeNow(); };
+    virtual Stg::Model *GetModel(const std::string &name) const { return World::GetModel(name); };
+    virtual Stg::usec_t SimTimeNow(void) const { return World::SimTimeNow(); };
 
     virtual void step()
     {
@@ -77,8 +77,8 @@ public:
 
     virtual bool Load(const std::string &worldfile_path) { WorldGui::Load(worldfile_path); };
     virtual void UnLoad() { WorldGui::UnLoad(); };
-    virtual Stg::Model *GetModel(const std::string &name) const { WorldGui::GetModel(name); };
-    virtual Stg::usec_t SimTimeNow(void) const { WorldGui::SimTimeNow(); };
+    virtual Stg::Model *GetModel(const std::string &name) const { return WorldGui::GetModel(name); };
+    virtual Stg::usec_t SimTimeNow(void) const { return WorldGui::SimTimeNow(); };
 
     void step()
     {
