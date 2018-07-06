@@ -69,6 +69,8 @@ void SimpleExplorationController::startExploration()
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();
   is_planner_initialized_ = true;
+  // should not use old plan if we reset the position of robot, hence set planner_status to false
+  planner_status_ = false;
 }
 
 void SimpleExplorationController::stopExploration()
