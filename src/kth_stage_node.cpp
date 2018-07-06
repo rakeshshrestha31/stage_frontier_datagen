@@ -231,6 +231,9 @@ public:
     auto half_width = metric_width / 2;
     auto half_height = metric_height / 2;
 
+    metric_map_size_ = cv::Size2f(metric_width + 2 * MAP_SIZE_CLEARANCE, metric_height + 2 * MAP_SIZE_CLEARANCE);
+    metric_map_half_size_ = cv::Size2f(half_width + MAP_SIZE_CLEARANCE, half_height + MAP_SIZE_CLEARANCE);
+
     private_nh_.setParam("global_costmap/ground_truth_layer/xmin", -half_width - MAP_SIZE_CLEARANCE);
     private_nh_.setParam("global_costmap/ground_truth_layer/ymin", -half_height - MAP_SIZE_CLEARANCE);
     private_nh_.setParam("global_costmap/ground_truth_layer/xmax", half_width + MAP_SIZE_CLEARANCE);
@@ -281,6 +284,13 @@ public:
 
         while (!is_latest_sensor_received_);
         is_latest_sensor_received_ = false;
+
+        if (!isRobotWithinMap())
+        {
+          ROS_WARN("The robot has strayed outside of the map, quitting");
+          break;
+        }
+
       } while (planner_failure_count_ < PLANNER_FAILURE_TOLERANCE && ros::ok());
       ROS_INFO("simulation session ended successfully");
     }
@@ -349,6 +359,18 @@ public:
         }
       }
     }
+  }
+
+
+  bool isRobotWithinMap()
+  {
+    Stg::Pose robot_pose;
+    auto is_success = stage_interface_->getRobotPose(robot_pose);
+    return is_success
+      &&robot_pose.x >= -metric_map_half_size_.width
+      && robot_pose.x <= metric_map_half_size_.width
+      && robot_pose.y >= -metric_map_half_size_.height
+      && robot_pose.y <= metric_map_half_size_.height;
   }
 
   /**
@@ -464,6 +486,8 @@ protected:
 
   nav_msgs::Path last_path_;
   cv::Mat current_groundtruth_map_;
+  cv::Size2d metric_map_size_;
+  cv::Size2d metric_map_half_size_;
 
   nav_msgs::Odometry groundtruth_odom_;
   boost::mutex groundtruth_odom_mutex_;
