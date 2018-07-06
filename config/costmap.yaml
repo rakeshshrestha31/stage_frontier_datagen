@@ -52,4 +52,5 @@ global_costmap:
     xmax:         35
     ymin:         -20
     ymax:         20
+    resolution:   0.1
     unknown_cost_value: 255
