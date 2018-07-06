@@ -3,7 +3,7 @@ k_rot: 2.0
 
 tolerance_trans: 0.1
 tolerance_rot: 0.2
-tolerance_timeout: 0.5
+tolerance_timeout: 0.2
 
 holonomic: false
 

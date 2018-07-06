@@ -31,6 +31,8 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //=================================================================================================
 
+#define MAX_ROBOT_TO_FIRST_WAYPOINT_DISTANCE 2
+
 #include <stage_frontier_datagen/simple_exploration_controller.h>
 namespace stage_frontier_datagen
 {
@@ -67,6 +69,8 @@ void SimpleExplorationController::startExploration()
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();
   is_planner_initialized_ = true;
+  // should not use old plan if we reset the position of robot, hence set planner_status to false
+  planner_status_ = false;
 }
 
 void SimpleExplorationController::stopExploration()
@@ -129,16 +133,30 @@ bool SimpleExplorationController::updatePlan()
     planner_status_ = planner_->doExploration(pose, path.poses);
     is_planner_running_ = false;
 
+    if (path.poses.empty())
+    {
+      planner_status_ = false;
+    }
+
     if (planner_status_)
     {
-      updatePath(path);
-      ROS_INFO("Generated exploration current_path_ with %u poses", (unsigned int) current_path_.poses.size());
-      current_path_.header.frame_id = "map";
-      current_path_.header.stamp = ros::Time::now();
-
-      if (exploration_plan_pub_.getNumSubscribers() > 0)
+      if (std::hypot(path.poses[0].pose.position.x - pose.pose.position.x,
+                     path.poses[0].pose.position.y - pose.pose.position.y) > MAX_ROBOT_TO_FIRST_WAYPOINT_DISTANCE)
       {
-        exploration_plan_pub_.publish(current_path_);
+        planner_status_ = false;
+        ROS_WARN("Invalid plan, first waypoint far away from robot");
+      }
+      else
+      {
+        updatePath(path);
+        ROS_INFO("Generated exploration current_path_ with %u poses", (unsigned int) current_path_.poses.size());
+        current_path_.header.frame_id = "map";
+        current_path_.header.stamp = ros::Time::now();
+
+        if (exploration_plan_pub_.getNumSubscribers() > 0)
+        {
+          exploration_plan_pub_.publish(current_path_);
+        }
       }
     }
     else
