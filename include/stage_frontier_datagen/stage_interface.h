@@ -18,6 +18,8 @@
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <tf/transform_broadcaster.h>
 
+namespace stage_frontier_datagen
+{
 /**
  * @brief interface for stage simulation
  * @details adapted from https://github.com/Voidminded/DQNStageROS and https://github.com/payamn/DeepRLMapCoverage
@@ -52,7 +54,6 @@ public:
   public:
     using World::World;
     virtual ~StepWorld() {};
-
     virtual bool Load(const std::string &worldfile_path) { return World::Load(worldfile_path); };
     virtual void UnLoad() { World::UnLoad(); };
     virtual Stg::Model *GetModel(const std::string &name) const { return World::GetModel(name); };
@@ -99,7 +100,8 @@ public:
    */
   StageInterface(int argc, char **argv,
                  const boost::shared_ptr<AbstractStepWorld> &stage_world, const std::string &worldfile,
-                 const boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr)> &sensor_callback);
+                 const boost::function<int(const sensor_msgs::LaserScanConstPtr &,
+                                           const nav_msgs::OdometryConstPtr)> &sensor_callback);
 
   /**
    * @brief reset the StageInterface with another new world file
@@ -133,6 +135,13 @@ public:
   void updateCmdVel(const geometry_msgs::Twist &cmd_vel);
 
   /**
+   *
+   * @param pose output pose
+   * @return whether the pose query was successful
+   */
+  bool getRobotPose(Stg::Pose &pose);
+
+  /**
    * @brief stage callback for pose update (static because we need function pointer)
    * @param model stage pose model
    * @param stage_interface pointer to object of StageInterface
@@ -160,7 +169,8 @@ protected:
   /**
    * @brief callback functor on sensor data update
    */
-  boost::function<int (const sensor_msgs::LaserScanConstPtr&, const nav_msgs::OdometryConstPtr&)> sensor_callback_functor_;
+  boost::function<int(const sensor_msgs::LaserScanConstPtr &,
+                      const nav_msgs::OdometryConstPtr &)> sensor_callback_functor_;
 
   Stg::ModelRanger *laser_model_;
   Stg::ModelPosition *robot_model_;
@@ -182,4 +192,5 @@ protected:
   tf2_ros::StaticTransformBroadcaster static_tf_broadcaster_;
 };
 
+} // namespace stage_frontier_datagen
 #endif //STAGE_FRONTIER_DATAGEN_STAGE_INTERFACE_H
