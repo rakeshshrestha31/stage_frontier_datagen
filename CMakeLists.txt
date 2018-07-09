@@ -36,6 +36,7 @@ link_directories(${LIB_FLOORPLAN_DIR}/output)
 find_package(stage 4.3 REQUIRED)
 
 find_package(OpenCV 2.4)
+find_package(yaml-cpp 0.6 REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -162,7 +163,7 @@ add_executable(kth_stage_node
   src/frontier_analysis.cpp
   src/stage_interface.cpp
   src/utils.cpp
-  )
+  src/data_recorder.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -179,6 +180,7 @@ target_link_libraries(kth_stage_node
   ${catkin_LIBRARIES}
   ${STAGE_LIBRARIES}
   ${OpenCV_LIBS}
+  yaml-cpp
   floorplan
 )
 

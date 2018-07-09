@@ -11,11 +11,13 @@
 #include <stage_frontier_datagen/utils.h>
 
 #include <hector_exploration_planner/custom_costmap_2d_ros.h>
+#include <hector_exploration_planner/hector_exploration_planner.h>
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <iostream>
+#include <fstream>
 #include <stack>
 #include <map>
 #include <numeric>
@@ -33,8 +35,155 @@ namespace stage_frontier_datagen
 namespace frontier_analysis
 {
 
-cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros, double desired_resolution,
-               const tf::Transform &transform_gt_est)
+cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)
+{
+  cv::Mat map;
+  boost::shared_ptr<costmap_2d::Costmap2D> static_layer;
+  boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros->getCostmap()->getMutex()));
+  for (const auto &layer: *(costmap_2d_ros->getLayeredCostmap()->getPlugins()))
+  {
+    std::string layer_name = layer->getName();
+    if (layer_name.find("ground_truth") != std::string::npos)  // find ground truth layer
+    {
+      static_layer = boost::dynamic_pointer_cast<costmap_2d::Costmap2D>(layer);
+      break;
+    }
+  }
+
+  // get raw map and flip it to cv::Mat, because the costmap origin starts from bottom left,
+  // while opencv matrix origin start at top left
+  if(static_layer)
+  {
+    auto raw_costmap = costmap_2d_ros->getCostmap()->getCharMap(); //static_layer->getCharMap();
+    cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1,
+                            (void *) raw_costmap);
+
+    cv::flip(raw_costmap_img, map, 0);
+  }
+
+  // split map into free, obstacle, unknown
+  cv::Mat unknown, free, obstacle;
+  thresholdCostmap(map, unknown, free, obstacle);
+
+  // merge three channels into one map
+  std::vector<cv::Mat> channels(3);
+  channels[0] = unknown;
+  channels[1] = free;
+  channels[2] = obstacle;
+  cv::Mat rgb_image;
+  cv::merge(channels, rgb_image);
+
+  return rgb_image;
+}
+
+void getFrontierPoints(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
+    boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner,
+    std::vector<std::vector<cv::Point>>& all_clusters_cv)
+{
+  std::vector<std::vector<geometry_msgs::PoseStamped>> all_clusters = planner->getClusteredFrontierPoints();
+  for(auto single_cluster: all_clusters)
+  {
+    std::vector<cv::Point> single_cluster_cv =
+        frontier_analysis::worldPointsToMapPoints(single_cluster, costmap_2d_ros);
+    all_clusters_cv.push_back(single_cluster_cv);
+  }
+}
+
+void resizeFrontierPoints(std::vector<std::vector<cv::Point>> &inputPoints,
+                          std::vector<std::vector<cv::Point>> &outputPoints,double ratio)
+{
+  for(auto single_cluster: inputPoints)
+  {
+    std::vector<cv::Point> single_cluster_cv;
+    for(auto single_point: single_cluster)
+    {
+      cv::Point point(int(single_point.x * ratio), int(single_point.y * ratio));
+      single_cluster_cv.push_back(point);
+    }
+    outputPoints.push_back(single_cluster_cv);
+  }
+}
+
+void convertToGroundTruthSize(std::vector<std::vector<cv::Point>> &inputPoints,
+                              std::vector<std::vector<cv::Point>> &outputPoints,
+                              cv::Size orgSize, cv::Size groundtruth_size)
+{
+  int diff_height_half = (int)std::floor((groundtruth_size.height - orgSize.height) / 2.0);
+  int diff_width_half = (int)std::floor((groundtruth_size.width - orgSize.width) / 2.0);
+
+  for(auto single_cluster: inputPoints)
+  {
+    std::vector<cv::Point> single_cluster_cv;
+    for(auto single_point: single_cluster)
+    {
+      cv::Point point(single_point.x + diff_width_half, single_point.y + diff_height_half);
+      single_cluster_cv.push_back(point);
+    }
+    outputPoints.push_back(single_cluster_cv);
+  }
+}
+
+std::vector<cv::Rect> generateBoundingBox(std::vector<std::vector<cv::Point>> &inputPoints)
+{
+  std::vector<cv::Rect> outputBoundingBox;
+  for(auto single_cluster: inputPoints)
+  {
+    if(!single_cluster.empty())
+    {
+      cv::Rect bounding_box = cv::boundingRect(single_cluster);
+      outputBoundingBox.push_back(bounding_box);
+    }
+  }
+  return outputBoundingBox;
+}
+
+cv::Mat generateBoundingBoxImage(std::vector<cv::Rect> &inputRects, cv::Size size)
+{
+  cv::Mat img = cv::Mat::zeros(size.height, size.width, CV_8UC1);
+  for(cv::Rect rect : inputRects)
+  {
+    img(rect).setTo(cv::Scalar(255));
+  }
+  return img;
+}
+
+cv::Mat generateVerifyImage(cv::Mat costmap, std::vector<cv::Rect> &boundingBoxes,
+                         std::vector<std::vector<cv::Point>> cluster_frontiers)
+{
+  int height = costmap.size().height, width = costmap.size().width;
+  // generate frontiers map
+  cv::Mat frontier_points(height, width, CV_8UC1, cv::Scalar(0));
+  for(std::vector<cv::Point> cluster: cluster_frontiers)
+  {
+    for(cv::Point frontier: cluster)
+    {
+      frontier_points.at<unsigned char>(frontier) = 255;
+    }
+  }
+
+  // generate boundingBox map
+  cv::Mat boundingBoxImage(height, width, CV_8UC1, cv::Scalar(0));
+  for(auto rect: boundingBoxes)
+  {
+    cv::rectangle(boundingBoxImage, rect, cv::Scalar(255));
+  }
+
+  cv::Mat channels[3];
+  cv::split(costmap, channels);
+
+  std::vector<cv::Mat> new_channels(3);
+  new_channels[0] = frontier_points;  // Frontier Points
+  new_channels[1] = channels[1];      // Free Space
+  new_channels[2] = boundingBoxImage; // Bounding Box Image
+
+  cv::Mat rgb_image;
+  cv::merge(new_channels, rgb_image);
+
+  return rgb_image;
+}
+
+
+cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros, double desired_resolution)
 {
   cv::Mat map;
   boost::shared_ptr<costmap_2d::Costmap2D> static_layer;
@@ -58,16 +207,6 @@ cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap
       cv::Mat raw_costmap_img(static_layer->getSizeInCellsY(), static_layer->getSizeInCellsX(), CV_8UC1,
                               (void *) raw_costmap);
 
-      // center at (0, 0) of the map
-      auto centering_affine_transformation = getMapCenteringAffineTransformation(static_layer);
-      cv::warpAffine(raw_costmap_img, map, centering_affine_transformation, cv::Size(raw_costmap_img.cols, raw_costmap_img.rows));
-      raw_costmap_img = map.clone();
-
-      // rotate and translate to fit groundtruth
-      auto gt_alignment_affine_transformation = getMapGroundtruthAffineTransformation(static_layer, transform_gt_est);
-      cv::warpAffine(raw_costmap_img, map, gt_alignment_affine_transformation, cv::Size(raw_costmap_img.cols, raw_costmap_img.rows));
-      raw_costmap_img = map.clone();
-
       // the costmap origin starts from bottom left, while opencv matrix origin start at top left
       cv::flip(raw_costmap_img, map, 0);
     }
@@ -82,9 +221,27 @@ cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap
       map = resized_map;
     }
 
-    map = thresholdCostmap(map);
+    cv::Mat unknown, free, obstacle;
+    thresholdCostmap(map, unknown, free, obstacle);
+    map = free;
   }
   return map;
+}
+
+void thresholdCostmap(const cv::Mat &original, cv::Mat &unknown, cv::Mat &free, cv::Mat &obstacle)
+{
+  double thres_small = 10, thres_large =  254;
+  // get unknown space
+  cv::threshold(original, unknown, thres_large, 255, cv::THRESH_BINARY);
+  // get free space
+  cv::threshold(original, free, thres_small, 255, cv::THRESH_BINARY_INV);
+
+  // reserve both obstacle and unknown with original values, set free to 0
+  cv::Mat obstacle_unknown;
+  cv::threshold(original, obstacle_unknown, thres_small, 255, cv::THRESH_BINARY);
+  // remove unknown value by minus them
+  cv::Mat obstacle_tmp = obstacle_unknown - unknown;
+  obstacle_tmp.copyTo(obstacle);
 }
 
 cv::Mat thresholdCostmap(const cv::Mat &original_map)
@@ -95,8 +252,7 @@ cv::Mat thresholdCostmap(const cv::Mat &original_map)
 }
 
 cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
-                            const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses,
-                            const tf::Transform &transform_gt_est)
+                            const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses)
 {
   costmap_2d::Costmap2D* costmap;
   int size_x;
@@ -115,7 +271,7 @@ cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::
 
   for (const auto &frontier_world_points: clustered_frontier_poses)
   {
-    auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros, transform_gt_est);
+    auto frontier_map_points = frontier_analysis::worldPointsToMapPoints(frontier_world_points, costmap_2d_ros);
     if (!frontier_map_points.empty())
     {
       cv::Rect bounding_box_costmap = cv::boundingRect(frontier_map_points);
@@ -244,9 +400,9 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
   return resized_bounding_rect;
 }
 
+
 std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
-                                              const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
-                                              const tf::Transform &transform_gt_est)
+                                              const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)
 {
   auto costmap = costmap_2d_ros->getCostmap();
   auto resolution = costmap->getResolution();
@@ -265,7 +421,7 @@ std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::P
     tf::Vector3 estimated_position_vector(
       world_point.pose.position.x, world_point.pose.position.y, world_point.pose.position.z
     );
-    auto groundtruth_position_vector = transform_gt_est * estimated_position_vector;
+    auto groundtruth_position_vector = estimated_position_vector;
     map_x = static_cast<unsigned int>(groundtruth_position_vector.getX() / resolution + costmap->getSizeInCellsX() / 2);
     // y is negated because y is pointing downwards in opencv coords but upwards in costmap coords
     map_y = static_cast<unsigned int>(-groundtruth_position_vector.getY() / resolution + costmap->getSizeInCellsY() / 2);

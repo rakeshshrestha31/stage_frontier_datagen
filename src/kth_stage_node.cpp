@@ -10,7 +10,7 @@
 
 #define STAGE_LOAD_SLEEP 3
 
-#define PLANNER_FAILURE_TOLERANCE 2 // 15 // 15e5
+#define PLANNER_FAILURE_TOLERANCE 15 // 15e5
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
@@ -37,6 +37,7 @@
 #include <stage_frontier_datagen/utils.h>
 #include <stage_frontier_datagen/frontier_analysis.h>
 #include <stage_frontier_datagen/stage_interface.h>
+#include <stage_frontier_datagen/data_recorder.h>
 
 // boost includes
 #include <boost/shared_ptr.hpp>
@@ -68,6 +69,13 @@ public:
       ROS_ERROR("ROSPARAM dataset_dir not set");
       exit(1);
     }
+
+    if (!private_nh_.getParam("data_record_dir", data_record_dir))
+    {
+      ROS_ERROR("ROSPARAM data_record_dir not set");
+      exit(1);
+    }
+
     package_path_ = ros::package::getPath(PACKAGE_NAME);
     last_path_.header.stamp = ros::Time(0);
 
@@ -112,64 +120,49 @@ public:
     planner_status_ = planner_status;
     if (planner_status)
     {
+      path_planning_num ++;
+
       planner_failure_count_ = 0;
       auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
       auto planner = exploration_controller.getPlanner();
-      auto frontier_img = planner->getFrontierImg();
-      auto clustered_frontier_poses = planner->getClusteredFrontierPoints();
 
-//      auto groundtruth_odom = getGroundtruthOdom();
-//      auto transform_gt_est = frontier_analysis::getTransformGroundtruthEstimated(costmap_2d_ros, groundtruth_odom);
+      //---- get raw costmap and clusted_frontier_points, resolution is the same with original costmap ---
+      // get costMap with three channels, unkown, free, obstacle
+      cv::Mat costMap = frontier_analysis::getMap(costmap_2d_ros);
+      // get frontiers points with the same resolution of costmap
+      std::vector<std::vector<cv::Point>> all_clusters_frontiers;
+      frontier_analysis::getFrontierPoints(costmap_2d_ros, planner, all_clusters_frontiers);
 
-      auto transform_gt_est = tf::Transform::getIdentity();
+      //--- resize costmap and clusted_frontier_points to the same resolution of ground_truth map---
+      double resize_ratio = costmap_2d_ros->getCostmap()->getResolution() / MAP_RESOLUTION;
+      cv::Mat costMap_resized;
+      cv::resize(costMap, costMap_resized, cv::Size(), resize_ratio, resize_ratio);
+      std::vector<std::vector<cv::Point>> frontiers_resized;
+      frontier_analysis::resizeFrontierPoints(all_clusters_frontiers, frontiers_resized, resize_ratio);
 
-      auto costmap_image = frontier_analysis::getMap(
-        costmap_2d_ros, costmap_2d_ros->getCostmap()->getResolution(), transform_gt_est
-      );
-      auto frontier_bounding_box_image = frontier_analysis::getBoundingBoxImage(
-        costmap_2d_ros, clustered_frontier_poses, transform_gt_est
-      );
+      //----- clip or padding costmap and frontier_points to adapt the size of ground truth----
+      cv::Size currentSize = costMap_resized.size(), GTSize = current_groundtruth_map_.size();
+      cv::Mat costMap_resized_clipped = frontier_analysis::convertToGroundtruthSize(costMap_resized, GTSize);
+      assert(costMap_resized_clipped.size() == GTSize);
+      std::vector<std::vector<cv::Point>> frontiers_resized_clipped;
+      frontier_analysis::convertToGroundTruthSize(frontiers_resized, frontiers_resized_clipped, currentSize, GTSize);
 
-      if (frontier_bounding_box_image.size() != costmap_image.size())
-      {
-        ROS_ERROR("costmap size changed while generating frontier images!!!");
-        return;
-      }
+      //-------- generate bounding box and boundingBox images for frontiers ---------
+      std::vector<cv::Rect> boundingBoxes = frontier_analysis::generateBoundingBox(frontiers_resized_clipped);
+      cv::Mat boundingBoxImg = frontier_analysis::generateBoundingBoxImage(boundingBoxes, GTSize);
 
-      cv::imwrite("/tmp/original.png", costmap_image);
+      //-------- record map and related informations ------
+      boost::filesystem::path floorplanName(getFloorplanName());
+      string floorplan_baseName = floorplanName.stem().string(); // baseName without extension
+      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
+                                 costMap_resized_clipped, boundingBoxImg);
+      data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration, path_planning_num,
+                                frontiers_resized_clipped, boundingBoxes);
 
-      // resize to desired resolution
-      auto resized_costmap_image = frontier_analysis::resizeToDesiredResolution(
-        costmap_image, costmap_2d_ros, MAP_RESOLUTION
-      );
-      auto resized_frontier_bounding_box_image = frontier_analysis::resizeToDesiredResolution(
-        frontier_bounding_box_image, costmap_2d_ros, MAP_RESOLUTION
-      );
-
-      // --------------------------- multi-channeled image for visualization --------------------------- //
-      std::vector<cv::Mat> channels(3);
-      cv::Mat rgb_image;
-
-      channels[0] = cv::Mat(costmap_image.rows, costmap_image.cols, costmap_image.type(), cv::Scalar(0));
-      channels[1] = costmap_image;
-      channels[2] = frontier_bounding_box_image;
-      cv::merge(channels, rgb_image);
-      cv::imwrite("/tmp/costmap.png", rgb_image);
-
-      // --------------------------- clip to get groundtruth portion of the map --------------------------- //
-      cv::Mat resized_clipped_costmap = frontier_analysis::convertToGroundtruthSize(
-        resized_costmap_image, current_groundtruth_map_.size()
-      );
-
-      cv::Mat resized_clipped_frontier_bb_image = frontier_analysis::convertToGroundtruthSize(
-        resized_frontier_bounding_box_image, current_groundtruth_map_.size()
-      );
-
-      channels[0] = cv::Scalar(255) - current_groundtruth_map_;
-      channels[1] = resized_clipped_costmap;
-      channels[2] = resized_clipped_frontier_bb_image;
-      cv::merge(channels, rgb_image);
-      cv::imwrite("/tmp/map.png", rgb_image);
+      // generate verifyImage and record it: optional
+      cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resized_clipped, boundingBoxes,
+          frontiers_resized_clipped);
+      data_recorder::recordVerifyImage(data_record_dir, floorplan_baseName, iteration, path_planning_num, verifyImg);
     }
     else
     {
@@ -309,8 +302,21 @@ public:
    */
   void run()
   {
-    for (const KTHStageLoader::floorplan_t &floorplan: kth_stage_loader_->getFloorplans())
+    string map_name = "";
+    int map_num_t = 0, iteration_t = 0;
+    if(data_recorder::readConfig(map_name, map_num_t, iteration_t))
     {
+      map_num = map_num_t; //here we only restore map_num
+    }
+    else
+    {
+      map_num = 0;
+    }
+
+    for (int i = map_num; i < kth_stage_loader_->getFloorplans().size(); i++, map_num ++)
+    {
+      const KTHStageLoader::floorplan_t &floorplan = kth_stage_loader_->getFloorplans()[i];
+      iteration = 0;
       if (floorplan.unobstructed_points.empty())
       {
         continue;
@@ -319,6 +325,9 @@ public:
       // run in the same map a number of times
       for (size_t floorplan_run_idx = 0; floorplan_run_idx < NUM_RUNS_IN_ONE_MAP; floorplan_run_idx++)
       {
+        iteration ++;
+        path_planning_num = 0;
+
         size_t random_index = std::rand() % floorplan.unobstructed_points.size();
         Point2D random_point_meters = convertMapCoordsToMeters(
           Point2D(
@@ -331,6 +340,10 @@ public:
 
         current_groundtruth_map_ = floorplan.map.clone();
         cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
+
+        boost::filesystem::path floorplanName(getFloorplanName());
+        string baseName = floorplanName.stem().string(); // baseName without extension
+        data_recorder::recordGTMapAndResolution(data_record_dir, baseName, current_groundtruth_map_, MAP_RESOLUTION);
 
         writeDebugMap(floorplan.graph, current_groundtruth_map_, floorplan.unobstructed_points, random_index);
 
@@ -352,6 +365,7 @@ public:
 
         runStageWorld();
 
+        data_recorder::writeConfig(this->getFloorplanName(), map_num, iteration);
 
         if (!ros::ok())
         {
@@ -359,6 +373,11 @@ public:
         }
       }
     }
+  }
+
+  string getFloorplanName()
+  {
+    return kth_stage_loader_->getFloorplans()[map_num].graph.m_property->floorname;
   }
 
 
@@ -483,6 +502,7 @@ protected:
   boost::shared_ptr<KTHStageLoader> kth_stage_loader_;
   boost::shared_ptr<SimpleExplorationController> exploration_controller_;
   std::string dataset_dir_;
+  std::string data_record_dir;
 
   nav_msgs::Path last_path_;
   cv::Mat current_groundtruth_map_;
@@ -511,6 +531,11 @@ protected:
   boost::atomic_bool is_latest_sensor_received_;
 
   std::string package_path_;
+
+  // current State: which map is running, the running iteration, the path planning number
+  int map_num = 0;
+  int iteration = 0;
+  int path_planning_num = 0;
 
   bool is_gui_;
 };
@@ -552,7 +577,6 @@ int main(int argc, char **argv)
       kth_stage_node.resetStageWorld();
       std::this_thread::sleep_for(std::chrono::seconds(STAGE_LOAD_SLEEP));
     }
-
   }
   return 0;
 

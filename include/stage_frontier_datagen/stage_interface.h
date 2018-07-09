@@ -76,7 +76,7 @@ public:
     StepWorldGui(int width, int height, const char *caption) : Stg::WorldGui(width, height, caption) {}
     using WorldGui::WorldGui;
 
-    virtual bool Load(const std::string &worldfile_path) { WorldGui::Load(worldfile_path); };
+    virtual bool Load(const std::string &worldfile_path) { return WorldGui::Load(worldfile_path); };
     virtual void UnLoad() { WorldGui::UnLoad(); };
     virtual Stg::Model *GetModel(const std::string &name) const { return WorldGui::GetModel(name); };
     virtual Stg::usec_t SimTimeNow(void) const { return WorldGui::SimTimeNow(); };

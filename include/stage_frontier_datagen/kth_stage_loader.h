@@ -6,8 +6,8 @@
 #define STAGE_FRONTIER_DATAGEN_KTH_STAGE_LOADER_H
 
 // TODO: make these proper parameters
-#define MAP_RESOLUTION 0.25         // meters/pixels
-#define MAP_SIZE cv::Size(256, 128)
+#define MAP_RESOLUTION 0.1         // meters/pixels
+#define MAP_SIZE cv::Size(1360, 1020)
 // the inflations are on the either side of the wall
 #define OBSTACLE_INFLATION_SIZE 0.5   // meters
 

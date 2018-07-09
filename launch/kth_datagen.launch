@@ -4,6 +4,7 @@
     <arg name="run_rviz" default="false" />
     <arg name="run_gui" default="false" />
     <arg name="dataset_dir" default="KTH_CampusValhallavagen_Floorplan_Dataset_RAW" />
+    <arg name="data_record_dir" default="/home/bird/data/floorplan_results/middle" />
 
     <arg name="laser_topic" default="base_scan" />
     <arg name="main_node_name" value="$(anon kth_stage_node)" />
@@ -13,8 +14,9 @@
     </include>
 
     <node pkg="stage_frontier_datagen" type="kth_stage_node" output="screen" name="$(arg main_node_name)"
-          if="$(arg run_main_node)">
+          if="$(arg run_main_node)" launch-prefix="xterm -e gdb -ex run --args">
         <param name="dataset_dir" value="$(arg dataset_dir)" />
+        <param name="data_record_dir" value="$(arg data_record_dir)" />
         <param name="gui" value="$(arg run_gui)" />
     </node>
 
