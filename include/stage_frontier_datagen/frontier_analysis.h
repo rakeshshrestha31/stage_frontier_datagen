@@ -24,6 +24,19 @@ namespace stage_frontier_datagen
 {
 namespace frontier_analysis
 {
+/**
+ * @brief get cv::Mat Raw image from costmap_2d_ros
+ * @param costmap_2d_ros
+ * @return Raw image with just one channels, 0: free, 254: obstacle, 255: unknown
+ */
+cv::Mat getRawMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros);
+
+/**
+ * @brief Split raw cv::Mat map into 3 channels map, represent free, obstacle and unkown in each channel
+ * @param rawMap One channel raw Map with values between 0-255, 0: free, 254: obstacle, 255: unknown
+ * @return Image with three channels
+ */
+cv::Mat splitRawMap(const cv::Mat &rawMap);
 
 /**
  * @brief get cv::Mat image from raw costmap_2d_ros
@@ -121,7 +134,7 @@ cv::Mat thresholdCostmap(const cv::Mat &original_map);
 
 /**
  * Split costmap into free, obstacle and unknown area
- * @param original the original map, 0: free, 100: obstacle, 255:unknown
+ * @param original the original map, 0: free, 254: obstacle, 255:unknown
  * @param free the free space
  * @param obstacle the obstacle map
  * @param unknown the unknown area

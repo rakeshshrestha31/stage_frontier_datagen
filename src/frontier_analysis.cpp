@@ -34,8 +34,7 @@ namespace stage_frontier_datagen
 {
 namespace frontier_analysis
 {
-
-cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)
+cv::Mat getRawMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)
 {
   cv::Mat map;
   boost::shared_ptr<costmap_2d::Costmap2D> static_layer;
@@ -60,10 +59,14 @@ cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap
 
     cv::flip(raw_costmap_img, map, 0);
   }
+  return map;
+}
 
-  // split map into free, obstacle, unknown
+cv::Mat splitRawMap(const cv::Mat &rawMap)
+{
+  // split map into three channels: free, obstacle, unknown
   cv::Mat unknown, free, obstacle;
-  thresholdCostmap(map, unknown, free, obstacle);
+  thresholdCostmap(rawMap, unknown, free, obstacle);
 
   // merge three channels into one map
   std::vector<cv::Mat> channels(3);
@@ -74,6 +77,12 @@ cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap
   cv::merge(channels, rgb_image);
 
   return rgb_image;
+}
+
+cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)
+{
+  cv::Mat map = getRawMap(costmap_2d_ros);
+  return splitRawMap(map);
 }
 
 void getFrontierPoints(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,

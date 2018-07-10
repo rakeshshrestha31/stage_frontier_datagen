@@ -5,7 +5,7 @@
 #ifndef DATAGEN_DATA_RECORDER_H
 #define DATAGEN_DATA_RECORDER_H
 
-#include <yaml-cpp/yaml.h>
+#include <json/json.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <ros/ros.h>
 #include <opencv2/opencv.hpp>
@@ -13,32 +13,32 @@
 namespace stage_frontier_datagen {
   namespace data_recorder {
     /**
-     * @brief convert a PoseStamped pose to YAML::Node
-     * @param pose PoseStamped pose
-     * @return YAML node
-     */
-    YAML::Node Pose2YAML(geometry_msgs::PoseStamped pose);
-
-    /**
-     * @brief convert a 2D cv::Point to YAML::Node
+     * @brief convert a 2D cv::Point to Json::Value
      * @param point cv::Point
-     * @return YAML node
+     * @return Json::Value
      */
-    YAML::Node Point2YAML(cv::Point point);
+    Json::Value Point2Json(const cv::Point &point);
 
     /**
-     * convert all frontiers cluster to a YAML::node
-     * @param cluster_frontiers frontier clusters, each frontier is represented by a PoseStamped pose
-     * @return YAML node
+     * @brief convert a cv::Rect to Json::Value
+     * @param point cv::Rect
+     * @return Json::Value
      */
-    YAML::Node FrontierClusters2Yaml(std::vector<std::vector<geometry_msgs::PoseStamped>> cluster_frontiers);
+    Json::Value Rect2Json(const cv::Rect &rect);
 
     /**
-     * convert all frontiers cluster to a YAML::node
+     * convert all frontiers cluster to a Json::Value
      * @param cluster_frontiers frontier clusters, each frontier is represented by a cv::Point
-     * @return YAML node
+     * @return Json value
      */
-    YAML::Node FrontierClusters2Yaml(std::vector<std::vector<cv::Point>> cluster_frontiers);
+    Json::Value FrontierClusters2Json(const std::vector<std::vector<cv::Point>> &cluster_frontiers);
+
+    /**
+     * convert all BoundingBox (Rectangles) of frontiers to a Json::Value
+     * @param rects BoundingBox of frontiers, each is represented by a cv::Rect
+     * @return Json value
+     */
+    Json::Value Rects2Json(const std::vector<cv::Rect> &rects);
 
     /**
      * Record Ground Truth image and related resolution into directory base_dir/map_name
@@ -48,6 +48,18 @@ namespace stage_frontier_datagen {
      * @param resolution the resolution of the ground images, meters/pixel
      */
     void recordGTMapAndResolution(std::string base_dir, std::string map_name, cv::Mat groundTruth, double resolution);
+
+    /**
+     * @brief record a image into directory base_dir/map_name/iteration for once path-planning
+     * @param base_dir base_dir base directory for recording
+     * @param map_name floorplan map name (better without extension)
+     * @param iteration the repeated iterations for this map
+     * @param planning_num the number of path planning in one exploration
+     * @param image image to be recorded
+     * @param record__base_name base name for record the image
+     */
+    void recordImage(std::string base_dir, std::string map_name, int iteration, int planning_num,
+                     const cv::Mat &image, std::string record__base_name);
 
     /**
      * @brief record costmap and bounding-box image into directory base_dir/map_name/iteration for once path-planning

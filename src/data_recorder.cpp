@@ -10,37 +10,19 @@ namespace fs=boost::filesystem;
 namespace stage_frontier_datagen {
   namespace data_recorder {
 
-#define CONFIG_FILENAME "config.yaml"
+#define CONFIG_FILENAME "config.json"
 
-    YAML::Node Pose2YAML(geometry_msgs::PoseStamped pose) {
-      YAML::Node position;
-      position.push_back(pose.pose.position.x);
-      position.push_back(pose.pose.position.y);
-      position.push_back(pose.pose.position.z);
-
-      YAML::Node orientation;
-      orientation.push_back(pose.pose.orientation.x);
-      orientation.push_back(pose.pose.orientation.y);
-      orientation.push_back(pose.pose.orientation.z);
-      orientation.push_back(pose.pose.orientation.w);
-
-      YAML::Node node;
-      node["position"] = position;
-      node["orientation"] = orientation;
-      return node;
-    }
-
-    YAML::Node Point2YAML(cv::Point point)
+    Json::Value Point2Json(const cv::Point &point)
     {
-      YAML::Node node;
+      Json::Value node;
       node["x"] = point.x;
       node["y"] = point.y;
       return node;
     }
 
-    YAML::Node Rect2YAML(cv::Rect rect)
+    Json::Value Rect2Json(const cv::Rect &rect)
     {
-      YAML::Node node;
+      Json::Value node;
       node["x"] = rect.x;
       node["y"] = rect.y;
       node["height"] = rect.height;
@@ -48,41 +30,28 @@ namespace stage_frontier_datagen {
       return node;
     }
 
-    YAML::Node FrontierClusters2Yaml(std::vector <std::vector<geometry_msgs::PoseStamped>> cluster_frontiers) {
-      YAML::Node all_clusters;
+    Json::Value FrontierClusters2Json(const std::vector<std::vector<cv::Point>> &cluster_frontiers)
+    {
+      Json::Value all_clusters;
       for (auto cluster: cluster_frontiers) {
-        YAML::Node a_cluster;
-        for (auto frontier_pose: cluster) {
-          YAML::Node point = Pose2YAML(frontier_pose);
-          a_cluster.push_back(point);
+        Json::Value a_cluster;
+        for (const auto frontier_pose: cluster) {
+          Json::Value point = Point2Json(frontier_pose);
+          a_cluster.append(point);
         }
-        all_clusters.push_back(a_cluster);
+        all_clusters.append(a_cluster);
       }
       return all_clusters;
     }
 
-    YAML::Node FrontierClusters2Yaml(std::vector<std::vector<cv::Point>> cluster_frontiers)
+    Json::Value Rects2Json(const std::vector<cv::Rect> &rects)
     {
-      YAML::Node all_clusters;
-      for (auto cluster: cluster_frontiers) {
-        YAML::Node a_cluster;
-        for (auto frontier_pose: cluster) {
-          YAML::Node point = Point2YAML(frontier_pose);
-          a_cluster.push_back(point);
-        }
-        all_clusters.push_back(a_cluster);
+      Json::Value rect_jsons;
+      for (const auto rect: rects) {
+        Json::Value point = Rect2Json(rect);
+        rect_jsons.append(point);
       }
-      return all_clusters;
-    }
-
-    YAML::Node Rects2YAML(std::vector<cv::Rect> rects)
-    {
-      YAML::Node rect_nodes;
-      for (auto rect: rects) {
-        YAML::Node rect_node = Rect2YAML(rect);
-        rect_nodes.push_back(rect_node);
-      }
-      return rect_nodes;
+      return rect_jsons;
     }
 
     fs::path constructPath(std::string base_dir, std::string map_name, int iteration)
@@ -127,16 +96,19 @@ namespace stage_frontier_datagen {
       if(!fs::exists(record_path))
         fs::create_directories(record_path);
 
-      fs::path info_path = record_path / ("info" + std::to_string(planning_num) + ".yaml");
+      fs::path info_path = record_path / ("info" + std::to_string(planning_num) + ".json");
 
-      YAML::Node frontiers =  FrontierClusters2Yaml(cluster_frontiers);
-      YAML::Node bb_nodes = Rects2YAML(frontierBoundingBox);
+      Json::Value frontiers =  FrontierClusters2Json(cluster_frontiers);
+      Json::Value bb_nodes = Rects2Json(frontierBoundingBox);
 
-      YAML::Node root;
+      Json::Value root;
       root["Frontiers"] = frontiers;
       root["BoundingBoxes"] = bb_nodes;
+
+      Json::StyledWriter writer;
+      std::string json_str = writer.write(root);
       std::ofstream fout(info_path.string());
-      fout << root;
+      fout << json_str;
       fout.close();
     }
 
@@ -153,31 +125,30 @@ namespace stage_frontier_datagen {
 
       cv::imwrite(image_path.string(), groundTruth);
 
-      fs::path info_name("GT.yaml");
+      fs::path info_name("GT.json");
       fs::path info_path = base_path/ map_path / info_name;
-      YAML::Node node;
+      Json::Value node;
       node["resolution"] = resolution;
-      std::ofstream fout(info_path.string());
-      fout << node;
-      fout.close();
-    }
 
-    void test(std::vector<std::vector<geometry_msgs::PoseStamped>> cluster_frontier)
-    {
-      std::string filename = "/tmp/frontiers.yaml";
-      YAML::Node node = FrontierClusters2Yaml(cluster_frontier);
-      std::ofstream fout(filename);
-      fout << node;
+      Json::StyledWriter writer;
+      std::string json_str = writer.write(node);
+      std::ofstream fout(info_path.string());
+      fout << json_str;
+      fout.close();
     }
 
     void writeConfig(std::string map_name, int map_num, int iteration)
     {
-      YAML::Node config;
+      Json::Value config;
       config["map_name"] = map_name;
       config["map_num"] = map_num;
       config["iteration"] = iteration;
+
+      Json::StyledWriter writer;
+      std::string json_str = writer.write(config);
       std::ofstream fout(CONFIG_FILENAME);
-      fout << config;
+      fout << json_str;
+      fout.close();
     }
 
     bool readConfig(std::string& map_name, int &map_num, int &iteration)
@@ -185,10 +156,13 @@ namespace stage_frontier_datagen {
       if(!fs::exists(CONFIG_FILENAME))
         return false;
 
-      YAML::Node config = YAML::LoadFile(CONFIG_FILENAME);
-      map_name = config["map_name"].as<std::string>();
-      map_num = config["map_num"].as<int>();
-      iteration = config["iteration"].as<int>();
+      Json::Value config;
+      std::ifstream file(CONFIG_FILENAME);
+      file >> config;
+
+      map_name = config["map_name"].asString();
+      map_num = config["map_num"].asInt();
+      iteration = config["iteration"].asInt();
       return true;
     }
   }
