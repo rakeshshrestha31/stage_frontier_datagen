@@ -291,7 +291,25 @@ cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::
   return frontier_bounding_box_image;
 }
 
-cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size groundtruth_size)
+cv::Mat convertToGTSizeFillUnknown(const cv::Mat &original_map, const cv::Size groundtruth_size)
+{
+  assert(original_map.channels() == 3);
+
+  cv::Mat channels[3];
+  cv::split(original_map, channels);
+
+  std::vector<cv::Mat> new_channels(3);
+  new_channels[0] = convertToGTSize(channels[0], groundtruth_size, 255);  // Padding Unknown with 255
+  new_channels[1] = convertToGTSize(channels[1], groundtruth_size, 0);    // Free
+  new_channels[2] = convertToGTSize(channels[2], groundtruth_size, 0);    // Obstacle
+
+  cv::Mat rgb_image;
+  cv::merge(new_channels, rgb_image);
+
+  return rgb_image;
+}
+
+cv::Mat convertToGTSize(const cv::Mat &original_map, const cv::Size groundtruth_size, unsigned char padValue)
 {
   cv::Mat resized_clipped_map;
 
@@ -308,7 +326,8 @@ cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size gro
   {
     auto border_top = (int)std::floor(-diff_size_rows/2.0);
     auto border_bottom = (int)std::ceil(-diff_size_rows/2.0);
-    cv::copyMakeBorder(original_map, resized_clipped_map, border_top, border_bottom, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(0));
+    cv::copyMakeBorder(original_map, resized_clipped_map, border_top, border_bottom, 0, 0,
+                       cv::BORDER_CONSTANT, cv::Scalar(padValue));
   }
   else
   {
@@ -325,7 +344,8 @@ cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size gro
     auto border_left = (int)std::floor(-diff_size_cols/2.0);
     auto border_right = (int)std::ceil(-diff_size_cols/2.0);
     cv::Mat tmp_img = resized_clipped_map.clone();
-    cv::copyMakeBorder(tmp_img, resized_clipped_map, 0, 0, border_left, border_right, cv::BORDER_CONSTANT, cv::Scalar(0));
+    cv::copyMakeBorder(tmp_img, resized_clipped_map, 0, 0, border_left, border_right,
+                       cv::BORDER_CONSTANT, cv::Scalar(padValue));
   }
 
   assert(resized_clipped_map.size() == groundtruth_size);

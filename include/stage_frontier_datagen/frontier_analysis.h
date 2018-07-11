@@ -118,12 +118,22 @@ cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::
                             const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses);
 
 /**
- * @brief clip and resize the original map to fit groundtruth
+ * @brief clip and padding the original map to fit groundtruth
  * @param original_map
  * @param groundtruth_size
  * @return
  */
-cv::Mat convertToGroundtruthSize(const cv::Mat &original_map, const cv::Size groundtruth_size);
+cv::Mat convertToGTSizeFillUnknown(const cv::Mat &original_map, const cv::Size groundtruth_size);
+
+/**
+ * @brief clip and padding the original map to fit groundtruth
+ * @param original_map
+ * @param groundtruth_size
+ * @param padValue the value for padding area
+ * @return
+ */
+cv::Mat convertToGTSize(const cv::Mat &original_map,
+                                 const cv::Size groundtruth_size, unsigned char padValue = 0);
 
 /**
  *

@@ -151,7 +151,7 @@ public:
       //----- clip or padding costmap and frontier_points to adapt the size of ground truth----
       cv::Size currentSize = costMap_resized.size(), GTSize = current_groundtruth_map_.size();
 //      cv::Mat rawCostMap_resized_clipped = frontier_analysis::convertToGroundtruthSize(rawCostMap_resized, GTSize);
-      cv::Mat costMap_resized_clipped = frontier_analysis::convertToGroundtruthSize(costMap_resized, GTSize);
+      cv::Mat costMap_resized_clipped = frontier_analysis::convertToGTSizeFillUnknown(costMap_resized, GTSize);
       assert(costMap_resized_clipped.size() == GTSize);
       std::vector<std::vector<cv::Point>> frontiers_resized_clipped;
       frontier_analysis::convertToGroundTruthSize(frontiers_resized, frontiers_resized_clipped, currentSize, GTSize);
