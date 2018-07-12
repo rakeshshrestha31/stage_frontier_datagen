@@ -30,12 +30,35 @@ namespace stage_frontier_datagen {
       return node;
     }
 
+    Json::Value Pose2Json(const Pose2D pose)
+    {
+      Json::Value node;
+      node["x"] = pose.position.x;
+      node["y"] = pose.position.y;
+      node["yaw"] = pose.orientation;
+      return node;
+    }
+
+    Json::Value FrontierClusters2Json(const std::vector<std::vector<Pose2D>> &cluster_frontiers)
+    {
+      Json::Value all_clusters;
+      for (auto cluster: cluster_frontiers) {
+        Json::Value a_cluster;
+        for (const auto &frontier_pose: cluster) {
+          Json::Value point = Pose2Json(frontier_pose);
+          a_cluster.append(point);
+        }
+        all_clusters.append(a_cluster);
+      }
+      return all_clusters;
+    }
+
     Json::Value FrontierClusters2Json(const std::vector<std::vector<cv::Point>> &cluster_frontiers)
     {
       Json::Value all_clusters;
       for (auto cluster: cluster_frontiers) {
         Json::Value a_cluster;
-        for (const auto frontier_pose: cluster) {
+        for (const auto &frontier_pose: cluster) {
           Json::Value point = Point2Json(frontier_pose);
           a_cluster.append(point);
         }
@@ -47,7 +70,7 @@ namespace stage_frontier_datagen {
     Json::Value Rects2Json(const std::vector<cv::Rect> &rects)
     {
       Json::Value rect_jsons;
-      for (const auto rect: rects) {
+      for (const auto &rect: rects) {
         Json::Value point = Rect2Json(rect);
         rect_jsons.append(point);
       }
@@ -89,8 +112,8 @@ namespace stage_frontier_datagen {
     }
 
     void recordInfo(std::string base_dir, std::string map_name, int iteration, int planning_num,
-                    const std::vector<std::vector<cv::Point>> &cluster_frontiers,
-                    const std::vector<cv::Rect> &frontierBoundingBox)
+                    const std::vector<std::vector<Pose2D>> &cluster_frontiers,
+                    const std::vector<cv::Rect> &frontierBoundingBox, Pose2D robotPose)
     {
       fs::path record_path = constructPath(base_dir, map_name, iteration);
       if(!fs::exists(record_path))
@@ -100,10 +123,12 @@ namespace stage_frontier_datagen {
 
       Json::Value frontiers =  FrontierClusters2Json(cluster_frontiers);
       Json::Value bb_nodes = Rects2Json(frontierBoundingBox);
+      Json::Value robot_pose_node = Pose2Json(robotPose);
 
       Json::Value root;
       root["Frontiers"] = frontiers;
       root["BoundingBoxes"] = bb_nodes;
+      root["RobotPose"] = robot_pose_node;
 
       Json::StyledWriter writer;
       std::string json_str = writer.write(root);

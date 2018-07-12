@@ -15,6 +15,8 @@
 #include <hector_exploration_planner/hector_exploration_planner.h>
 #include <costmap_2d/static_layer.h>
 #include <nav_msgs/Odometry.h>
+#include <stage_frontier_datagen/data_recorder.h>
+#include <stage_frontier_datagen/simple_exploration_controller.h>
 #include <opencv2/core/core.hpp>
 
 #include <vector>
@@ -50,7 +52,22 @@ cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap
  */
 void getFrontierPoints(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                        boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner,
-                       std::vector<std::vector<cv::Point>>& all_clusters_cv);
+                       std::vector<std::vector<Pose2D>>& all_clusters_cv);
+
+/**
+ * @brief get the Robot Pose in the resolution of original map
+ * @param exploration_controller
+ * @return robot Pose
+ */
+Pose2D getRobotPose(const SimpleExplorationController &exploration_controller);
+
+/**
+ * @brief Resize a single Point by a ratio
+ * @param inputPoint the point to be resized
+ * @param ratio
+ * @return resized Point
+ */
+Pose2D resizePoint(const Pose2D &inputPoint, double ratio);
 
 /**
  * @brief resize Frontier Points by a ratio
@@ -58,8 +75,10 @@ void getFrontierPoints(const boost::shared_ptr<hector_exploration_planner::Custo
  * @param outputPoints
  * @param ratio
  */
-void resizeFrontierPoints(std::vector<std::vector<cv::Point>>& inputPoints,
-                          std::vector<std::vector<cv::Point>>& outputPoints,double ratio);
+void resizePoints(const std::vector<std::vector<Pose2D>> &inputPoints,
+                  std::vector<std::vector<Pose2D>> &outputPoints, double ratio);
+
+Pose2D convertToGroundTruthSize(const Pose2D &point, cv::Size orgSize, cv::Size groundtruth_size);
 
 /**
  * @brief adapt Frontier Points in original map to the padded/clipped map whose size is equal to the ground truth map's
@@ -68,8 +87,8 @@ void resizeFrontierPoints(std::vector<std::vector<cv::Point>>& inputPoints,
  * @param orgSize
  * @param groundtruth_size
  */
-void convertToGroundTruthSize(std::vector<std::vector<cv::Point>>& inputPoints,
-                              std::vector<std::vector<cv::Point>>& outputPoints,
+void convertToGroundTruthSize(const std::vector<std::vector<Pose2D>>& inputPoints,
+                              std::vector<std::vector<Pose2D>>& outputPoints,
                               cv::Size orgSize, cv::Size groundtruth_size);
 
 /**
@@ -77,7 +96,7 @@ void convertToGroundTruthSize(std::vector<std::vector<cv::Point>>& inputPoints,
  * @param inputPoints all frontier clusters
  * @return Bounding Boxes of every cluster, each one represented by a rectangle
  */
-std::vector<cv::Rect> generateBoundingBox(std::vector<std::vector<cv::Point>> &inputPoints);
+std::vector<cv::Rect> generateBoundingBox(std::vector<std::vector<Pose2D>> &inputPoints);
 
 /**
  * @brief generate a Bounding Box Image from all Bounding Box Rectangles, every Rectangle should in the range of image size
@@ -95,8 +114,8 @@ cv::Mat generateBoundingBoxImage(std::vector<cv::Rect> &inputRects, cv::Size siz
  * @param cluster_frontiers Frontiers Points
  * @return Verify Image
  */
-cv::Mat generateVerifyImage(cv::Mat costmap, std::vector<cv::Rect> &boundingBoxes,
-                       std::vector<std::vector<cv::Point>> cluster_frontiers);
+cv::Mat generateVerifyImage(const cv::Mat &costmap, const std::vector<cv::Rect> &boundingBoxes,
+                       const std::vector<std::vector<Pose2D>> &cluster_frontiers,const Pose2D &robotPose);
 
 /**
  *
@@ -220,6 +239,27 @@ cv::Mat resizeToDesiredResolution(const cv::Mat &costmap_image,
 cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
                                    const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
                                    double desired_resolution);
+
+/**
+ * @brief Convert a point in world coordinates (meters) to the point
+ * in map coordinate (pixel), the orientation is not changed
+ * @param world_pose point (with orientation) in world coordinates
+ * @param resolution the resolution of the map
+ * @param size_x width of the map
+ * @param size_y height of the map
+ * @return converted Point
+ */
+Pose2D worldPose2MapPose(const geometry_msgs::PoseStamped &world_pose, double resolution, int size_x, int size_y);
+
+/**
+ * @brief Convert a cluster of points in world coordinates (meters)
+ * to the points in map coordinate (pixel), the orientation is not changed
+ * @param world_points
+ * @param costmap_2d_ros
+ * @return converted Point
+ */
+std::vector<Pose2D> worldPosesToMapPoses(const std::vector<geometry_msgs::PoseStamped> &world_points,
+                                       const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros);
 
 /**
  *

@@ -74,7 +74,6 @@ public:
    */
   nav_msgs::Path getCurrentPath();
 
-
   /**
    *
    * @param resolution of the map
@@ -122,6 +121,19 @@ public:
   {
     return costmap_2d_ros_;
   }
+
+  /**
+   * Get the robot pose when finish last plan
+   * @return robot pose when finish last plan
+   */
+  geometry_msgs::PoseStamped getRobotPoseAtPlanEnd() const;
+
+  /**
+   * get current robot pose
+   * @param pose current robot pose, output param
+   * @return success or not
+   */
+  bool getRobotPose(geometry_msgs::PoseStamped &pose);
 
   /**
    *
@@ -174,6 +186,8 @@ protected:
   bool is_planner_initialized_;
   boost::atomic_bool planner_status_;
   boost::atomic_bool is_plan_update_callback_running_;
+
+  geometry_msgs::PoseStamped robot_pose_at_plan_end;
 
   // protected methods
   /**

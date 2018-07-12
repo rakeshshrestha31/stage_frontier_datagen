@@ -36,7 +36,7 @@ link_directories(${LIB_FLOORPLAN_DIR}/output)
 find_package(stage 4.3 REQUIRED)
 
 find_package(OpenCV 2.4)
-find_package(yaml-cpp 0.6 REQUIRED)
+find_package(jsoncpp REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -141,6 +141,7 @@ include_directories(
  include
   ${catkin_INCLUDE_DIRS}
   ${STAGE_INCLUDE_DIRS}
+  ${JSONCPP_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -180,8 +181,8 @@ target_link_libraries(kth_stage_node
   ${catkin_LIBRARIES}
   ${STAGE_LIBRARIES}
   ${OpenCV_LIBS}
-  yaml-cpp
   floorplan
+  ${JSONCPP_LIBRARIES}
 )
 
 #############

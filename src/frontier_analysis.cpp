@@ -12,6 +12,7 @@
 
 #include <hector_exploration_planner/custom_costmap_2d_ros.h>
 #include <hector_exploration_planner/hector_exploration_planner.h>
+#include <stage_frontier_datagen/simple_exploration_controller.h>
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -87,19 +88,40 @@ cv::Mat getMap(const boost::shared_ptr<hector_exploration_planner::CustomCostmap
 
 void getFrontierPoints(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
     boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner,
-    std::vector<std::vector<cv::Point>>& all_clusters_cv)
+    std::vector<std::vector<Pose2D>>& all_clusters_cv)
 {
   std::vector<std::vector<geometry_msgs::PoseStamped>> all_clusters = planner->getClusteredFrontierPoints();
   for(auto single_cluster: all_clusters)
   {
-    std::vector<cv::Point> single_cluster_cv =
-        frontier_analysis::worldPointsToMapPoints(single_cluster, costmap_2d_ros);
+    std::vector<Pose2D> single_cluster_cv =
+        frontier_analysis::worldPosesToMapPoses(single_cluster, costmap_2d_ros);
     all_clusters_cv.push_back(single_cluster_cv);
   }
 }
 
+Pose2D resizePoint(const Pose2D &inputPoint, double ratio)
+{
+  Pose2D pose_resize(int(inputPoint.position.x * ratio), int(inputPoint.position.y * ratio), inputPoint.orientation);
+  return pose_resize;
+}
+
+void resizePoints(const std::vector<std::vector<Pose2D>> &inputPoints,
+                  std::vector<std::vector<Pose2D>> &outputPoints, double ratio)
+{
+  for(auto single_cluster: inputPoints)
+  {
+    std::vector<Pose2D> single_cluster_resize;
+    for(auto pose: single_cluster)
+    {
+      Pose2D pose_resize(int(pose.position.x * ratio), int(pose.position.y * ratio), pose.orientation);
+      single_cluster_resize.push_back(pose_resize);
+    }
+    outputPoints.push_back(single_cluster_resize);
+  }
+}
+
 void resizeFrontierPoints(std::vector<std::vector<cv::Point>> &inputPoints,
-                          std::vector<std::vector<cv::Point>> &outputPoints,double ratio)
+                          std::vector<std::vector<cv::Point>> &outputPoints, double ratio)
 {
   for(auto single_cluster: inputPoints)
   {
@@ -113,12 +135,57 @@ void resizeFrontierPoints(std::vector<std::vector<cv::Point>> &inputPoints,
   }
 }
 
+Pose2D getRobotPose(const SimpleExplorationController &exploration_controller)
+{
+  auto robotPoseStamped = exploration_controller.getRobotPoseAtPlanEnd();
+  auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
+  auto costmap = costmap_2d_ros->getCostmap();
+  auto resolution = costmap->getResolution();
+  auto size_x = costmap->getSizeInCellsX();
+  auto size_y = costmap->getSizeInCellsY();
+
+  Pose2D pose = worldPose2MapPose(robotPoseStamped, resolution, size_x, size_y);
+
+  return pose;
+}
+
+Pose2D convertToGroundTruthSize(const Pose2D &point, cv::Size orgSize, cv::Size groundtruth_size)
+{
+  auto diff_height_half = (int)std::floor((groundtruth_size.height - orgSize.height) / 2.0);
+  auto diff_width_half = (int)std::floor((groundtruth_size.width - orgSize.width) / 2.0);
+
+  return Pose2D{point.position.x + diff_width_half,
+                point.position.y + diff_height_half,
+                point.orientation};
+}
+
+void convertToGroundTruthSize(const std::vector<std::vector<Pose2D>>& inputPoints,
+                              std::vector<std::vector<Pose2D>>& outputPoints,
+                              cv::Size orgSize, cv::Size groundtruth_size)
+{
+  auto diff_height_half = (int)std::floor((groundtruth_size.height - orgSize.height) / 2.0);
+  auto diff_width_half = (int)std::floor((groundtruth_size.width - orgSize.width) / 2.0);
+
+  for(auto single_cluster: inputPoints)
+  {
+    std::vector<Pose2D> single_cluster_resize;
+    for(auto single_point: single_cluster)
+    {
+      Pose2D point(single_point.position.x + diff_width_half,
+                   single_point.position.y + diff_height_half,
+                   single_point.orientation);
+      single_cluster_resize.push_back(point);
+    }
+    outputPoints.push_back(single_cluster_resize);
+  }
+}
+
 void convertToGroundTruthSize(std::vector<std::vector<cv::Point>> &inputPoints,
                               std::vector<std::vector<cv::Point>> &outputPoints,
                               cv::Size orgSize, cv::Size groundtruth_size)
 {
-  int diff_height_half = (int)std::floor((groundtruth_size.height - orgSize.height) / 2.0);
-  int diff_width_half = (int)std::floor((groundtruth_size.width - orgSize.width) / 2.0);
+  auto diff_height_half = (int)std::floor((groundtruth_size.height - orgSize.height) / 2.0);
+  auto diff_width_half = (int)std::floor((groundtruth_size.width - orgSize.width) / 2.0);
 
   for(auto single_cluster: inputPoints)
   {
@@ -132,10 +199,31 @@ void convertToGroundTruthSize(std::vector<std::vector<cv::Point>> &inputPoints,
   }
 }
 
+std::vector<cv::Rect> generateBoundingBox(std::vector<std::vector<Pose2D>> &inputPoints)
+{
+  std::vector<cv::Rect> outputBoundingBox;
+  for(const auto &single_cluster: inputPoints)
+  {
+    if(!single_cluster.empty())
+    {
+      std::vector<cv::Point> cluster_cv;
+      cluster_cv.reserve(single_cluster.size());
+      for(auto point: single_cluster)
+      {
+        cluster_cv.emplace_back(point.position.x, point.position.y);
+      }
+
+      cv::Rect bounding_box = cv::boundingRect(cluster_cv);
+      outputBoundingBox.push_back(bounding_box);
+    }
+  }
+  return outputBoundingBox;
+}
+
 std::vector<cv::Rect> generateBoundingBox(std::vector<std::vector<cv::Point>> &inputPoints)
 {
   std::vector<cv::Rect> outputBoundingBox;
-  for(auto single_cluster: inputPoints)
+  for(const auto &single_cluster: inputPoints)
   {
     if(!single_cluster.empty())
     {
@@ -149,33 +237,35 @@ std::vector<cv::Rect> generateBoundingBox(std::vector<std::vector<cv::Point>> &i
 cv::Mat generateBoundingBoxImage(std::vector<cv::Rect> &inputRects, cv::Size size)
 {
   cv::Mat img = cv::Mat::zeros(size.height, size.width, CV_8UC1);
-  for(cv::Rect rect : inputRects)
+  for(const cv::Rect &rect : inputRects)
   {
     img(rect).setTo(cv::Scalar(255));
   }
   return img;
 }
 
-cv::Mat generateVerifyImage(cv::Mat costmap, std::vector<cv::Rect> &boundingBoxes,
-                         std::vector<std::vector<cv::Point>> cluster_frontiers)
+cv::Mat generateVerifyImage(const cv::Mat &costmap, const std::vector<cv::Rect> &boundingBoxes,
+                         const std::vector<std::vector<Pose2D>> &cluster_frontiers, const Pose2D &robotPose)
 {
   int height = costmap.size().height, width = costmap.size().width;
   // generate frontiers map
   cv::Mat frontier_points(height, width, CV_8UC1, cv::Scalar(0));
-  for(std::vector<cv::Point> cluster: cluster_frontiers)
+  for(std::vector<Pose2D> cluster: cluster_frontiers)
   {
-    for(cv::Point frontier: cluster)
+    for(Pose2D frontier: cluster)
     {
-      frontier_points.at<unsigned char>(frontier) = 255;
+      frontier_points.at<unsigned char>(frontier.position) = 255;
     }
   }
 
   // generate boundingBox map
   cv::Mat boundingBoxImage(height, width, CV_8UC1, cv::Scalar(0));
-  for(auto rect: boundingBoxes)
+  for(const auto &rect: boundingBoxes)
   {
     cv::rectangle(boundingBoxImage, rect, cv::Scalar(255));
   }
+
+  cv::circle(boundingBoxImage, robotPose.position, 2, cv::Scalar(255, 255, 255), -1);
 
   cv::Mat channels[3];
   cv::split(costmap, channels);
@@ -261,7 +351,7 @@ cv::Mat thresholdCostmap(const cv::Mat &original_map)
 }
 
 cv::Mat getBoundingBoxImage(const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros,
-                            const std::vector< std::vector<geometry_msgs::PoseStamped> > clustered_frontier_poses)
+                            const std::vector< std::vector<geometry_msgs::PoseStamped>> clustered_frontier_poses)
 {
   costmap_2d::Costmap2D* costmap;
   int size_x;
@@ -429,6 +519,39 @@ cv::Rect resizeToDesiredResolution(const cv::Rect &costmap_bounding_rect,
   return resized_bounding_rect;
 }
 
+Pose2D worldPose2MapPose(const geometry_msgs::PoseStamped &world_pose, double resolution, int size_x, int size_y)
+{
+  double world_x = world_pose.pose.position.x;
+  double world_y = world_pose.pose.position.y;
+  double yaw = tf::getYaw(world_pose.pose.orientation);
+
+  int map_x = (int) (world_x / resolution) + size_x / 2;
+  int map_y = (int) (-world_y / resolution) + size_y / 2;
+
+  return Pose2D{map_x, map_y, yaw};
+}
+
+std::vector<Pose2D> worldPosesToMapPoses(const std::vector<geometry_msgs::PoseStamped> &world_poses,
+                                             const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)
+{
+  auto costmap = costmap_2d_ros->getCostmap();
+  auto resolution = costmap->getResolution();
+  auto size_x = costmap->getSizeInCellsX();
+  auto size_y = costmap->getSizeInCellsY();
+
+  std::vector<Pose2D> map_poses;
+  map_poses.reserve(world_poses.size());
+
+  for(const auto &world_pose: world_poses)
+  {
+    Pose2D pose = worldPose2MapPose(world_pose, resolution, size_x, size_y);
+    if(pose.position.x >=0 && pose.position.x < size_x && pose.position.y >=0 && pose.position.y < size_y)
+    {
+      map_poses.push_back(pose);
+    }
+  }
+  return map_poses;
+}
 
 std::vector<cv::Point> worldPointsToMapPoints(const std::vector<geometry_msgs::PoseStamped> &world_points,
                                               const boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> &costmap_2d_ros)

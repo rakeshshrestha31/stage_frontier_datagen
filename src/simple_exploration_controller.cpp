@@ -107,24 +107,9 @@ bool SimpleExplorationController::updatePlan()
     return false;
   }
 
-  tf::Stamped<tf::Pose> robot_pose_tf;
-  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
-
-  if (!robot_pose_status || robot_pose_tf.getRotation().length2() < 1e-5)
-  {
-    ROS_ERROR("Failed to get robot pose from costmap");
-    return false;
-  }
-
   geometry_msgs::PoseStamped pose;
-  tf::poseStampedTFToMsg(robot_pose_tf, pose);
-
-  tf::Quaternion orientation;
-  tf::quaternionMsgToTF(pose.pose.orientation, orientation);
-  if (orientation.length2() < 1e-5)
-  {
-    ROS_ERROR("poseStampedTFToMsg incorrect");
-  }
+  if(!this->getRobotPose(pose))
+    return false;
 
   auto planner_thread = boost::thread([this, pose]() {
     nav_msgs::Path path;
@@ -234,6 +219,7 @@ void SimpleExplorationController::generateCmdVel()
 
     if (!is_planner_running_)
     {
+      getRobotPose(this->robot_pose_at_plan_end);
       updatePlan();
     }
   }
@@ -291,6 +277,33 @@ void SimpleExplorationController::updateRobotOdom(const nav_msgs::OdometryConstP
     costmap_2d_ros_->setRobotOdom(odom);
     path_follower_.setRobotOdom(odom);
   }
+}
+
+geometry_msgs::PoseStamped SimpleExplorationController::getRobotPoseAtPlanEnd() const
+{
+  return this->robot_pose_at_plan_end;
+}
+
+bool SimpleExplorationController::getRobotPose(geometry_msgs::PoseStamped &pose)
+{
+  tf::Stamped<tf::Pose> robot_pose_tf;
+  bool robot_pose_status = costmap_2d_ros_->getRobotPose(robot_pose_tf);
+
+  if (!robot_pose_status || robot_pose_tf.getRotation().length2() < 1e-5)
+  {
+    ROS_ERROR("Failed to get robot pose from costmap");
+    return false;
+  }
+
+  tf::poseStampedTFToMsg(robot_pose_tf, pose);
+
+  tf::Quaternion orientation;
+  tf::quaternionMsgToTF(pose.pose.orientation, orientation);
+  if (orientation.length2() < 1e-5)
+  {
+    ROS_ERROR("poseStampedTFToMsg incorrect");
+  }
+  return true;
 }
 
 void SimpleExplorationController::initializeCostmap()

@@ -11,7 +11,27 @@
 #include <opencv2/opencv.hpp>
 
 namespace stage_frontier_datagen {
+  struct Pose2D
+  {
+    cv::Point position;
+    double orientation;
+
+    Pose2D(int x, int y, double yaw)
+    {
+      position.x = x;
+      position.y = y;
+      orientation = yaw;
+    }
+
+    Pose2D(cv::Point position, double yaw)
+    {
+      this->position = position;
+      this->orientation = yaw;
+    }
+  };
+
   namespace data_recorder {
+
     /**
      * @brief convert a 2D cv::Point to Json::Value
      * @param point cv::Point
@@ -20,11 +40,20 @@ namespace stage_frontier_datagen {
     Json::Value Point2Json(const cv::Point &point);
 
     /**
+     * @brief Convert a 2D pose to Json::Value
+     * @param pose 2D pose, position and orientation (yaw)
+     * @return Json::Value
+     */
+    Json::Value Pose2Json(const Pose2D pose);
+
+    /**
      * @brief convert a cv::Rect to Json::Value
      * @param point cv::Rect
      * @return Json::Value
      */
     Json::Value Rect2Json(const cv::Rect &rect);
+
+    Json::Value FrontierClusters2Json(const std::vector<std::vector<Pose2D>> &cluster_frontiers);
 
     /**
      * convert all frontiers cluster to a Json::Value
@@ -92,10 +121,12 @@ namespace stage_frontier_datagen {
      * @param planning_num the number of path planning in one exploration
      * @param cluster_frontier all frontiers points in different frontier clusters
      * @param frontierBoundingBox all Bounding-Box for each cluster of frontiers
+     * @param robotPose robot pose when last plan finished
      */
     void recordInfo(std::string base_dir, std::string map_name, int iteration, int planning_num,
-                    const std::vector<std::vector<cv::Point>> &cluster_frontier,
-                    const std::vector<cv::Rect> &frontierBoundingBox);
+                    const std::vector<std::vector<Pose2D>> &cluster_frontier,
+                    const std::vector<cv::Rect> &frontierBoundingBox,
+                    const Pose2D robotPose);
     /**
      * @brief write configuration files to record the current state in collecting data
      * @param map_name the floorplan map name

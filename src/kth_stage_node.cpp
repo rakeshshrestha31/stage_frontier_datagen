@@ -131,33 +131,35 @@ public:
       cv::Mat rawCostMap = frontier_analysis::getRawMap(costmap_2d_ros);
       cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
 
-//      cv::Mat rawCostMap_thres;
-//      // get free space
-//      cv::threshold(rawCostMap, rawCostMap_thres, 10, 255, cv::THRESH_BINARY_INV);
+      // get robot pose
+      Pose2D robotPose = frontier_analysis::getRobotPose(exploration_controller);
 
       // get frontiers points with the same resolution of costmap
-      std::vector<std::vector<cv::Point>> all_clusters_frontiers;
+      std::vector<std::vector<Pose2D>> all_clusters_frontiers;
       frontier_analysis::getFrontierPoints(costmap_2d_ros, planner, all_clusters_frontiers);
+
 
       //--- resize costmap and clusted_frontier_points to the same resolution of ground_truth map---
       double resize_ratio = costmap_2d_ros->getCostmap()->getResolution() / MAP_RESOLUTION;
 //      cv::Mat rawCostMap_resized;
 //      cv::resize(rawCostMap, rawCostMap_resized, cv::Size(), resize_ratio, resize_ratio);
-      cv::Mat costMap_resized;
-      cv::resize(costMap, costMap_resized, cv::Size(), resize_ratio, resize_ratio);
-      std::vector<std::vector<cv::Point>> frontiers_resized;
-      frontier_analysis::resizeFrontierPoints(all_clusters_frontiers, frontiers_resized, resize_ratio);
+      cv::Mat costMap_resize;
+      cv::resize(costMap, costMap_resize, cv::Size(), resize_ratio, resize_ratio);
+      std::vector<std::vector<Pose2D>> frontiers_resize;
+      frontier_analysis::resizePoints(all_clusters_frontiers, frontiers_resize, resize_ratio);
+      Pose2D robotPose_resize = frontier_analysis::resizePoint(robotPose, resize_ratio);
 
       //----- clip or padding costmap and frontier_points to adapt the size of ground truth----
-      cv::Size currentSize = costMap_resized.size(), GTSize = current_groundtruth_map_.size();
+      cv::Size currentSize = costMap_resize.size(), GTSize = current_groundtruth_map_.size();
 //      cv::Mat rawCostMap_resized_clipped = frontier_analysis::convertToGroundtruthSize(rawCostMap_resized, GTSize);
-      cv::Mat costMap_resized_clipped = frontier_analysis::convertToGTSizeFillUnknown(costMap_resized, GTSize);
-      assert(costMap_resized_clipped.size() == GTSize);
-      std::vector<std::vector<cv::Point>> frontiers_resized_clipped;
-      frontier_analysis::convertToGroundTruthSize(frontiers_resized, frontiers_resized_clipped, currentSize, GTSize);
+      cv::Mat costMap_resize_clipped = frontier_analysis::convertToGTSizeFillUnknown(costMap_resize, GTSize);
+      assert(costMap_resize_clipped.size() == GTSize);
+      std::vector<std::vector<Pose2D>> frontiers_resize_clipped;
+      frontier_analysis::convertToGroundTruthSize(frontiers_resize, frontiers_resize_clipped, currentSize, GTSize);
+      Pose2D robotPose_resize_clipped = frontier_analysis::convertToGroundTruthSize(robotPose_resize, currentSize, GTSize);
 
       //-------- generate bounding box and boundingBox images for frontiers ---------
-      std::vector<cv::Rect> boundingBoxes = frontier_analysis::generateBoundingBox(frontiers_resized_clipped);
+      std::vector<cv::Rect> boundingBoxes = frontier_analysis::generateBoundingBox(frontiers_resize_clipped);
       cv::Mat boundingBoxImg = frontier_analysis::generateBoundingBoxImage(boundingBoxes, GTSize);
 
       //-------- record map and related informations ------
@@ -168,16 +170,16 @@ public:
 //      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
 //                                 rawCostMap_resized_clipped, "raw_costmap");
       data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-                                 costMap_resized_clipped, boundingBoxImg);
+                                 costMap_resize_clipped, boundingBoxImg);
       data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-                                frontiers_resized_clipped, boundingBoxes);
+                                frontiers_resize_clipped, boundingBoxes, robotPose);
 
 //      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
 //                                 rawCostMap_thres, "raw_costmap_original_thres");
 
       // generate verifyImage and record it: optional
-      cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resized_clipped, boundingBoxes,
-          frontiers_resized_clipped);
+      cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resize_clipped, boundingBoxes,
+          frontiers_resize_clipped, robotPose_resize_clipped);
       data_recorder::recordVerifyImage(data_record_dir, floorplan_baseName, iteration, path_planning_num, verifyImg);
     }
     else
@@ -379,9 +381,9 @@ public:
           );
         }
 
-        runStageWorld();
-
         data_recorder::writeConfig(this->getFloorplanName(), map_num, iteration);
+
+        runStageWorld();
 
         if (!ros::ok())
         {
