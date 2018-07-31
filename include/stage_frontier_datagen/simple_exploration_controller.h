@@ -17,9 +17,9 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/function.hpp>
 
-#include <frontier_analysis/frontier_analysis.h>
+#include <hector_exploration_planner/frontier_analysis.h>
 
-using frontier_analysis::Pose2D;
+using namespace hector_exploration_planner::frontier_analysis;
 
 namespace stage_frontier_datagen
 {
@@ -144,7 +144,7 @@ public:
    * @param exploration_controller
    * @return robot Pose
    */
-  Pose2D getRobotPose();
+  hector_exploration_planner::frontier_analysis::Pose2D getRobotPose();
 
   /**
    *

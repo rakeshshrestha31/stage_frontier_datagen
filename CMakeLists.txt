@@ -9,7 +9,6 @@ add_compile_options(-std=c++14)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   costmap_2d
-  frontier_analysis
   geometry_msgs
   ground_truth_layer
   hector_exploration_planner
@@ -36,7 +35,7 @@ link_directories(${LIB_FLOORPLAN_DIR}/output)
 
 find_package(stage 4.3 REQUIRED)
 
-find_package(OpenCV 2.4)
+find_package(OpenCV) #  2.4)
 find_package(jsoncpp REQUIRED)
 
 

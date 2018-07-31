@@ -39,6 +39,8 @@
 #include <stage_frontier_datagen/stage_interface.h>
 #include <stage_frontier_datagen/data_recorder.h>
 
+#include <hector_exploration_planner/frontier_analysis.h>
+
 // boost includes
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
@@ -47,6 +49,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 using namespace stage_frontier_datagen;
+using namespace hector_exploration_planner;
 
 class KTHStageNode
 {

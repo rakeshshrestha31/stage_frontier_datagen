@@ -315,7 +315,7 @@ Pose2D SimpleExplorationController::getRobotPose()
   auto size_x = costmap->getSizeInCellsX();
   auto size_y = costmap->getSizeInCellsY();
 
-  Pose2D pose = frontier_analysis::worldPose2MapPose(robotPoseStamped, resolution, size_x, size_y);
+  Pose2D pose = worldPose2MapPose(robotPoseStamped, resolution, size_x, size_y);
 
   return pose;
 }

@@ -10,10 +10,10 @@
 #include <ros/ros.h>
 #include <opencv2/opencv.hpp>
 
-#include <frontier_analysis/frontier_analysis.h>
+#include <hector_exploration_planner/frontier_analysis.h>
 
 namespace stage_frontier_datagen {
-  using frontier_analysis::Pose2D;
+  using hector_exploration_planner::frontier_analysis::Pose2D;
 
   namespace data_recorder {
 
