@@ -306,6 +306,20 @@ bool SimpleExplorationController::getRobotPose(geometry_msgs::PoseStamped &pose)
   return true;
 }
 
+Pose2D SimpleExplorationController::getRobotPose()
+{
+  auto robotPoseStamped = getRobotPoseAtPlanEnd();
+  auto costmap_2d_ros = getCostmap2DROS();
+  auto costmap = costmap_2d_ros->getCostmap();
+  auto resolution = costmap->getResolution();
+  auto size_x = costmap->getSizeInCellsX();
+  auto size_y = costmap->getSizeInCellsY();
+
+  Pose2D pose = frontier_analysis::worldPose2MapPose(robotPoseStamped, resolution, size_x, size_y);
+
+  return pose;
+}
+
 void SimpleExplorationController::initializeCostmap()
 {
   costmap_2d_ros_.reset(new hector_exploration_planner::CustomCostmap2DROS("global_costmap", tfl_, false));

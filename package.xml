@@ -101,6 +101,10 @@
   <build_export_depend>ground_truth_layer</build_export_depend>
   <exec_depend>ground_truth_layer</exec_depend>
 
+  <build_depend>frontier_analysis</build_depend>
+  <build_export_depend>frontier_analysis</build_export_depend>
+  <exec_depend>frontier_analysis</exec_depend>
+
   <!-- The export tag contains other, unspecified, tags -->
   <export>
     <!-- Other tools can request additional information be placed here -->

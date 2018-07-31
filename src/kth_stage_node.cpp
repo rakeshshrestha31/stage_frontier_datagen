@@ -35,7 +35,7 @@
 #include <stage_frontier_datagen/kth_stage_loader.h>
 #include <stage_frontier_datagen/simple_exploration_controller.h>
 #include <stage_frontier_datagen/utils.h>
-#include <stage_frontier_datagen/frontier_analysis.h>
+//#include <stage_frontier_datagen/frontier_analysis.h>
 #include <stage_frontier_datagen/stage_interface.h>
 #include <stage_frontier_datagen/data_recorder.h>
 
@@ -132,7 +132,7 @@ public:
       cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
 
       // get robot pose
-      Pose2D robotPose = frontier_analysis::getRobotPose(exploration_controller);
+      Pose2D robotPose = exploration_controller_->getRobotPose();
 
       // get frontiers points with the same resolution of costmap
       std::vector<std::vector<Pose2D>> all_clusters_frontiers;

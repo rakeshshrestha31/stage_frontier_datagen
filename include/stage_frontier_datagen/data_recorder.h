@@ -10,25 +10,10 @@
 #include <ros/ros.h>
 #include <opencv2/opencv.hpp>
 
+#include <frontier_analysis/frontier_analysis.h>
+
 namespace stage_frontier_datagen {
-  struct Pose2D
-  {
-    cv::Point position;
-    double orientation;
-
-    Pose2D(int x, int y, double yaw)
-    {
-      position.x = x;
-      position.y = y;
-      orientation = yaw;
-    }
-
-    Pose2D(cv::Point position, double yaw)
-    {
-      this->position = position;
-      this->orientation = yaw;
-    }
-  };
+  using frontier_analysis::Pose2D;
 
   namespace data_recorder {
 

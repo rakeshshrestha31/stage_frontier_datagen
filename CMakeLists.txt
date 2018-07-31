@@ -9,6 +9,7 @@ add_compile_options(-std=c++14)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   costmap_2d
+  frontier_analysis
   geometry_msgs
   ground_truth_layer
   hector_exploration_planner
@@ -161,7 +162,7 @@ add_executable(kth_stage_node
   src/kth_stage_node.cpp
   src/kth_stage_loader.cpp
   src/simple_exploration_controller.cpp
-  src/frontier_analysis.cpp
+#  src/frontier_analysis.cpp
   src/stage_interface.cpp
   src/utils.cpp
   src/data_recorder.cpp)

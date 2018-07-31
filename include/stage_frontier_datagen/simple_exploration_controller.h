@@ -17,6 +17,10 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/function.hpp>
 
+#include <frontier_analysis/frontier_analysis.h>
+
+using frontier_analysis::Pose2D;
+
 namespace stage_frontier_datagen
 {
 class SimpleExplorationController
@@ -134,6 +138,13 @@ public:
    * @return success or not
    */
   bool getRobotPose(geometry_msgs::PoseStamped &pose);
+
+  /**
+   * @brief get the Robot Pose in the resolution of original map
+   * @param exploration_controller
+   * @return robot Pose
+   */
+  Pose2D getRobotPose();
 
   /**
    *
