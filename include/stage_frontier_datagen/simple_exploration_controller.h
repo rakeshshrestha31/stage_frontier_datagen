@@ -106,9 +106,14 @@ public:
    *
    * @param callback callback function to call when new plan received
    */
-  void subscribeNewPlan(boost::function<void(const SimpleExplorationController&, bool)> callback)
+  void subscribeNewPlan(const boost::function<void(const SimpleExplorationController&, bool)> &callback)
   {
     plan_update_callback_ = callback;
+  }
+
+  void subscribePlanFinished(const boost::function<void(const SimpleExplorationController&, int)> &callback)
+  {
+    plan_finished_callback_ = callback;
   }
 
   /**
@@ -132,6 +137,23 @@ public:
    */
   geometry_msgs::PoseStamped getRobotPoseAtPlanEnd() const;
 
+  void getLastPlanInfo(
+      std::vector<geometry_msgs::PoseStamped> &robot_poses,
+      std::vector<double> &times,
+      std::vector<double> &areas
+      ) const
+  {
+    robot_poses = this->robot_poses_in_plan;
+    times = this->ms_time_stamps_in_plan;
+    areas = this->explored_area_in_plan;
+  }
+
+  std::vector<geometry_msgs::PoseStamped> getRobotPosesInPlan() const {return this->robot_poses_in_plan;}
+
+  std::vector<double> getTimeStampsInPlan() const {return this->ms_time_stamps_in_plan;}
+
+  std::vector<double> getExploredAreaInPlan() const {return this->explored_area_in_plan;}
+
   /**
    * get current robot pose
    * @param pose current robot pose, output param
@@ -144,7 +166,7 @@ public:
    * @param exploration_controller
    * @return robot Pose
    */
-  hector_exploration_planner::frontier_analysis::Pose2D getRobotPose();
+  hector_exploration_planner::frontier_analysis::Pose2D getRobotPose() const;
 
   /**
    *
@@ -180,6 +202,7 @@ protected:
   boost::mutex path_mutex_;
   boost::atomic_bool is_planner_running_;
   boost::function<void(const SimpleExplorationController&, bool)> plan_update_callback_;  ///< callback on plan update
+  boost::function<void(const SimpleExplorationController&, int)> plan_finished_callback_;  ///< callback on plan update
 
   boost::mutex update_cmd_vel_functor_mutex_;
   boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor_;
@@ -196,7 +219,14 @@ protected:
 
   bool is_planner_initialized_;
   boost::atomic_bool planner_status_;
+  bool last_planner_status_;
   boost::atomic_bool is_plan_update_callback_running_;
+
+  std::vector<geometry_msgs::PoseStamped> robot_poses_in_plan;
+  std::vector<double> ms_time_stamps_in_plan;
+  std::vector<double> explored_area_in_plan;
+
+  int plan_number_;
 
   geometry_msgs::PoseStamped robot_pose_at_plan_end;
 
@@ -205,6 +235,16 @@ protected:
    * clears the costmap (without unsubscribing to the required topics)
    */
   void clearCostmap();
+
+  void clearPlanData();
+
+  void clearData();
+
+  void updateCmdVel(const geometry_msgs::Twist &cmd_vel);
+
+  bool ObstaclesInWayPoints();
+
+  void updateStepMotionInfo();
 };
 } // namespace stage_frontier_datagen
 #endif //STAGE_FRONTIER_DATAGEN_SIMPLE_EXPLORATION_CONTROLLER_H

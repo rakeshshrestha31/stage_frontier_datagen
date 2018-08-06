@@ -30,7 +30,7 @@ namespace stage_frontier_datagen {
       return node;
     }
 
-    Json::Value Pose2Json(const Pose2D pose)
+    Json::Value Pose2Json(const Pose2D &pose)
     {
       Json::Value node;
       node["x"] = pose.position.x;
@@ -39,32 +39,24 @@ namespace stage_frontier_datagen {
       return node;
     }
 
-    Json::Value FrontierClusters2Json(const std::vector<std::vector<Pose2D>> &cluster_frontiers)
+    Json::Value Poses2Json(const std::vector<Pose2D> &poses)
     {
-      Json::Value all_clusters;
-      for (auto cluster: cluster_frontiers) {
-        Json::Value a_cluster;
-        for (const auto &frontier_pose: cluster) {
-          Json::Value point = Pose2Json(frontier_pose);
-          a_cluster.append(point);
-        }
-        all_clusters.append(a_cluster);
+      Json::Value poses_json;
+      for (const auto &pose: poses) {
+        Json::Value pose_json = Pose2Json(pose);
+        poses_json.append(pose_json);
       }
-      return all_clusters;
+      return poses_json;
     }
 
-    Json::Value FrontierClusters2Json(const std::vector<std::vector<cv::Point>> &cluster_frontiers)
+    Json::Value Poses2Json(const std::vector<std::vector<Pose2D>> &poses_sets)
     {
-      Json::Value all_clusters;
-      for (auto cluster: cluster_frontiers) {
-        Json::Value a_cluster;
-        for (const auto &frontier_pose: cluster) {
-          Json::Value point = Point2Json(frontier_pose);
-          a_cluster.append(point);
-        }
-        all_clusters.append(a_cluster);
+      Json::Value poses_sets_json;
+      for (const auto &poses: poses_sets) {
+        Json::Value poses_json = Poses2Json(poses);
+        poses_sets_json.append(poses_json);
       }
-      return all_clusters;
+      return poses_sets_json;
     }
 
     Json::Value Rects2Json(const std::vector<cv::Rect> &rects)
@@ -75,6 +67,16 @@ namespace stage_frontier_datagen {
         rect_jsons.append(point);
       }
       return rect_jsons;
+    }
+
+    Json::Value nums2Json(const std::vector<double> &nums)
+    {
+      Json::Value jsons;
+      for(const auto& num: nums)
+      {
+        jsons.append(num);
+      }
+      return jsons;
     }
 
     fs::path constructPath(std::string base_dir, std::string map_name, int iteration)
@@ -112,8 +114,13 @@ namespace stage_frontier_datagen {
     }
 
     void recordInfo(std::string base_dir, std::string map_name, int iteration, int planning_num,
-                    const std::vector<std::vector<Pose2D>> &cluster_frontiers,
-                    const std::vector<cv::Rect> &frontierBoundingBox, Pose2D robotPose)
+                    const std::vector<std::vector<Pose2D>> &frontier_clusters,
+                    const std::vector<Pose2D> &frontier_cluster_centers,
+                    const std::vector<cv::Rect> &frontierBoundingBox,
+                    const Pose2D& robotPose,
+                    const std::vector<Pose2D> &plan_poses,
+                    const std::vector<double> &plan_ms_times,
+                    const std::vector<double> &plan_explored_areas)
     {
       fs::path record_path = constructPath(base_dir, map_name, iteration);
       if(!fs::exists(record_path))
@@ -121,14 +128,19 @@ namespace stage_frontier_datagen {
 
       fs::path info_path = record_path / ("info" + std::to_string(planning_num) + ".json");
 
-      Json::Value frontiers =  FrontierClusters2Json(cluster_frontiers);
+      Json::Value frontiers =  Poses2Json(frontier_clusters);
+      Json::Value centers = Poses2Json(frontier_cluster_centers);
       Json::Value bb_nodes = Rects2Json(frontierBoundingBox);
       Json::Value robot_pose_node = Pose2Json(robotPose);
 
       Json::Value root;
       root["Frontiers"] = frontiers;
+      root["Frontier_centers"] = centers;
       root["BoundingBoxes"] = bb_nodes;
       root["RobotPose"] = robot_pose_node;
+      root["plan_poses"] = Poses2Json(plan_poses);
+      root["plan_times"] = nums2Json(plan_ms_times);
+      root["plan_areas"] = nums2Json(plan_explored_areas);
 
       Json::StyledWriter writer;
       std::string json_str = writer.write(root);

@@ -34,16 +34,22 @@
 #define MAX_ROBOT_TO_FIRST_WAYPOINT_DISTANCE 2
 
 #include <stage_frontier_datagen/simple_exploration_controller.h>
+#include <thread>
+#include <cmath>
+
 namespace stage_frontier_datagen
 {
 SimpleExplorationController::SimpleExplorationController(const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor)
   : update_cmd_vel_functor_(update_cmd_vel_functor),
     planner_(new hector_exploration_planner::HectorExplorationPlanner()),
     plan_update_callback_(0),
+    plan_finished_callback_(0),
     is_planner_initialized_(false),
     is_planner_running_(false),
     is_plan_update_callback_running_(false),
-    planner_status_(true)
+    planner_status_(false),
+    last_planner_status_(false),
+    plan_number_(0)
 {
   path_follower_.initialize(&tfl_);
 
@@ -59,6 +65,7 @@ SimpleExplorationController::SimpleExplorationController(const boost::function<v
 
 void SimpleExplorationController::startExploration()
 {
+  clearData();
   if (!costmap_2d_ros_)
   {
     initializeCostmap();
@@ -69,8 +76,6 @@ void SimpleExplorationController::startExploration()
   exploration_plan_generation_timer_.start();
   cmd_vel_generator_timer_.start();
   is_planner_initialized_ = true;
-  // should not use old plan if we reset the position of robot, hence set planner_status to false
-  planner_status_ = false;
 }
 
 void SimpleExplorationController::stopExploration()
@@ -88,7 +93,7 @@ void SimpleExplorationController::stopExploration()
     }
   }
 
-  clearCostmap();
+  clearData();
 
   is_planner_initialized_ = false;
 
@@ -111,58 +116,62 @@ bool SimpleExplorationController::updatePlan()
   if(!this->getRobotPose(pose))
     return false;
 
+  // record robot pose at the end pose of last plan
+  getRobotPose(this->robot_pose_at_plan_end);
+
   auto planner_thread = boost::thread([this, pose]() {
     nav_msgs::Path path;
     is_planner_running_ = true;
     ROS_INFO("running planner...");
     planner_status_ = planner_->doExploration(pose, path.poses);
+
+    // invoke finished call_back after doExploration so that frontiers is updated
+    // also write info before set is_planner_running by false to guarantee costmap is not changed
+    if(last_planner_status_ && plan_finished_callback_)
+    {
+      plan_finished_callback_(*this, this->plan_number_);
+    }
+
     is_planner_running_ = false;
 
-    if (path.poses.empty())
-    {
+    if (path.poses.empty()) {
       planner_status_ = false;
     }
 
-    if (planner_status_)
-    {
+    if (planner_status_) {
       if (std::hypot(path.poses[0].pose.position.x - pose.pose.position.x,
-                     path.poses[0].pose.position.y - pose.pose.position.y) > MAX_ROBOT_TO_FIRST_WAYPOINT_DISTANCE)
-      {
+                     path.poses[0].pose.position.y - pose.pose.position.y) > MAX_ROBOT_TO_FIRST_WAYPOINT_DISTANCE) {
         planner_status_ = false;
         ROS_WARN("Invalid plan, first waypoint far away from robot");
-      }
-      else
-      {
+      } else {
+        // clear last plan data
+        clearPlanData();
+        // update current path
         updatePath(path);
         ROS_INFO("Generated exploration current_path_ with %u poses", (unsigned int) current_path_.poses.size());
         current_path_.header.frame_id = "map";
         current_path_.header.stamp = ros::Time::now();
 
-        if (exploration_plan_pub_.getNumSubscribers() > 0)
-        {
+        if (exploration_plan_pub_.getNumSubscribers() > 0) {
           exploration_plan_pub_.publish(current_path_);
         }
+        plan_number_++;
       }
-    }
-    else
-    {
+    } else {
       ROS_INFO("planner failed");
     }
 
+    last_planner_status_ = static_cast<bool>(planner_status_);
+
     // make sure that the previous callback finished before going to next
-    if (plan_update_callback_)
-    {
-      if (!is_plan_update_callback_running_)
-      {
+    if (plan_update_callback_) {
+      if (!is_plan_update_callback_running_) {
         is_plan_update_callback_running_ = true;
         plan_update_callback_(*this, static_cast<bool>(planner_status_));
         is_plan_update_callback_running_ = false;
-      }
-      else
-      {
+      } else {
         ROS_WARN("Skipping plan update callback because previous one hasn't finished");
       }
-
     }
   });
 
@@ -189,6 +198,66 @@ void SimpleExplorationController::timerCmdVelGeneration(const ros::TimerEvent &e
   generateCmdVel();
 }
 
+bool SimpleExplorationController::ObstaclesInWayPoints()
+{
+  // check if current_plan_ is inside obstacle or not
+  int current_way_point = path_follower_.get_current_waypoint();
+  auto pose_size = current_path_.poses.size();
+  for (int i = current_way_point; i < pose_size; i++)
+  {
+    unsigned int mx,my;
+    auto costmap = costmap_2d_ros_->getCostmap();
+    auto charmap = costmap->getCharMap();
+    costmap->worldToMap(current_path_.poses[i].pose.position.x,current_path_.poses[i].pose.position.y,mx,my);
+    auto index = costmap->getIndex(mx,my);
+    if(charmap[index] != costmap_2d::FREE_SPACE)
+      return true;
+  }
+
+  return false;
+}
+
+void SimpleExplorationController::updateCmdVel(const geometry_msgs::Twist &cmd_vel)
+{
+  vel_pub_.publish(cmd_vel);
+  {
+    boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
+    if (update_cmd_vel_functor_)
+    {
+      update_cmd_vel_functor_(cmd_vel);
+    }
+  }
+}
+
+void SimpleExplorationController::updateStepMotionInfo()
+{
+  // get robot pose
+  geometry_msgs::PoseStamped pose;
+  // if cannot get current robot pose, skip...
+  if(!this->getRobotPose(pose))
+  {
+    ROS_WARN("Cannot get robot pose from costmap!");
+    return;
+  }
+
+  this->robot_poses_in_plan.push_back(pose);
+
+  // get time stamp
+  double cur_time = std::chrono::duration_cast< std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()
+  ).count();
+  this->ms_time_stamps_in_plan.push_back(cur_time);
+
+  // get current explored cells
+  cv::Mat map = hector_exploration_planner::frontier_analysis::getMap(this->costmap_2d_ros_);
+  cv::Mat channels[3]; // unknown, free, obstacle
+  cv::split(map, channels);
+  int cell_num_unknown = static_cast<int>(cv::sum(channels[0] / 255)[0]);
+  int cells_num_explored = map.size().height * map.size().width - cell_num_unknown;
+  double area = cells_num_explored * pow(this->costmap_2d_ros_->getCostmap()->getResolution(), 2);
+  this->explored_area_in_plan.push_back(area);
+}
+
 void SimpleExplorationController::generateCmdVel()
 {
   // whether the callback is already running
@@ -196,6 +265,20 @@ void SimpleExplorationController::generateCmdVel()
 
   if (is_running)
   {
+    return;
+  }
+
+  // check if new obstacles occurs in current plan's following way points
+  if(ObstaclesInWayPoints())
+  {
+    ROS_WARN("Plan inside obstacle, re-planning!");
+    updatePlan();
+
+    // empty twist while planning
+    geometry_msgs::Twist empty_vel;
+    vel_pub_.publish(empty_vel);
+    // block while planning
+    while (is_planner_running_);
     return;
   }
 
@@ -208,32 +291,18 @@ void SimpleExplorationController::generateCmdVel()
 
     // empty twist while planning
     geometry_msgs::Twist empty_vel;
-    vel_pub_.publish(empty_vel);
-    {
-      boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
-      if (update_cmd_vel_functor_)
-      {
-        update_cmd_vel_functor_(empty_vel);
-      }
-    }
+    updateCmdVel(empty_vel);
 
     if (!is_planner_running_)
     {
-      getRobotPose(this->robot_pose_at_plan_end);
       updatePlan();
     }
   }
   else
   {
-    // TODO: remove comment
-    vel_pub_.publish(twist);
-    {
-      boost::mutex::scoped_lock lock(update_cmd_vel_functor_mutex_);
-      if (update_cmd_vel_functor_)
-      {
-        update_cmd_vel_functor_(twist);
-      }
-    }
+    updateCmdVel(twist);
+    // only record one step motion info when everything is right
+    updateStepMotionInfo();
   }
 
   is_running = false;
@@ -262,6 +331,22 @@ void SimpleExplorationController::clearCostmap()
 
   boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap_2d_ros_->getCostmap()->getMutex()));
   costmap_2d_ros_->resetLayers();
+}
+
+void SimpleExplorationController::clearPlanData()
+{
+  robot_poses_in_plan.clear();
+  ms_time_stamps_in_plan.clear();
+  explored_area_in_plan.clear();
+}
+
+void SimpleExplorationController::clearData()
+{
+  this->plan_number_ = 0;
+  this->last_planner_status_ = false;
+  planner_status_ = false;
+  clearPlanData();
+  clearCostmap();
 }
 
 void SimpleExplorationController::updateCmdVelFunctor(const boost::function<void(const geometry_msgs::Twist&)> &update_cmd_vel_functor)
@@ -306,7 +391,7 @@ bool SimpleExplorationController::getRobotPose(geometry_msgs::PoseStamped &pose)
   return true;
 }
 
-Pose2D SimpleExplorationController::getRobotPose()
+Pose2D SimpleExplorationController::getRobotPose() const
 {
   auto robotPoseStamped = getRobotPoseAtPlanEnd();
   auto costmap_2d_ros = getCostmap2DROS();

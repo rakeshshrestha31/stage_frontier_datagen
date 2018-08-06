@@ -29,7 +29,7 @@ namespace stage_frontier_datagen {
      * @param pose 2D pose, position and orientation (yaw)
      * @return Json::Value
      */
-    Json::Value Pose2Json(const Pose2D pose);
+    Json::Value Pose2Json(const Pose2D &pose);
 
     /**
      * @brief convert a cv::Rect to Json::Value
@@ -38,14 +38,19 @@ namespace stage_frontier_datagen {
      */
     Json::Value Rect2Json(const cv::Rect &rect);
 
-    Json::Value FrontierClusters2Json(const std::vector<std::vector<Pose2D>> &cluster_frontiers);
-
     /**
-     * convert all frontiers cluster to a Json::Value
-     * @param cluster_frontiers frontier clusters, each frontier is represented by a cv::Point
+     * convert all poses  to a Json::Value
+     * @param poses a set of Pose2D
      * @return Json value
      */
-    Json::Value FrontierClusters2Json(const std::vector<std::vector<cv::Point>> &cluster_frontiers);
+    Json::Value Poses2Json(const std::vector<Pose2D> &poses);
+
+    /**
+     * convert all poses sets to a Json::Value
+     * @param poses_sets sets of poses, each set contains a set of Pose2D
+     * @return Json value
+     */
+    Json::Value Poses2Json(const std::vector<std::vector<Pose2D>> &poses_sets);
 
     /**
      * convert all BoundingBox (Rectangles) of frontiers to a Json::Value
@@ -53,6 +58,8 @@ namespace stage_frontier_datagen {
      * @return Json value
      */
     Json::Value Rects2Json(const std::vector<cv::Rect> &rects);
+
+    Json::Value nums2Json(const std::vector<double> &nums);
 
     /**
      * Record Ground Truth image and related resolution into directory base_dir/map_name
@@ -104,14 +111,19 @@ namespace stage_frontier_datagen {
      * @param map_name floorplan map name (better without extension)
      * @param iteration the repeated iterations for this map
      * @param planning_num the number of path planning in one exploration
-     * @param cluster_frontier all frontiers points in different frontier clusters
+     * @param frontier_clusters all frontiers points in different frontier clusters
+     * @param frontier_cluster_centers frontier cluster centers
      * @param frontierBoundingBox all Bounding-Box for each cluster of frontiers
      * @param robotPose robot pose when last plan finished
      */
     void recordInfo(std::string base_dir, std::string map_name, int iteration, int planning_num,
-                    const std::vector<std::vector<Pose2D>> &cluster_frontier,
+                    const std::vector<std::vector<Pose2D>> &frontier_clusters,
+                    const std::vector<Pose2D> &frontier_cluster_centers,
                     const std::vector<cv::Rect> &frontierBoundingBox,
-                    const Pose2D robotPose);
+                    const Pose2D& robotPose,
+                    const std::vector<Pose2D> &plan_poses,
+                    const std::vector<double> &plan_ms_times,
+                    const std::vector<double> &plan_explored_areas);
     /**
      * @brief write configuration files to record the current state in collecting data
      * @param map_name the floorplan map name

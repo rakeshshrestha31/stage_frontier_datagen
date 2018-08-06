@@ -10,11 +10,11 @@
 
 #define STAGE_LOAD_SLEEP 3
 
-#define PLANNER_FAILURE_TOLERANCE 15 // 15e5
+#define PLANNER_FAILURE_TOLERANCE 3 // 15e5
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
-#define NUM_RUNS_IN_ONE_MAP 100
+#define NUM_RUNS_IN_ONE_MAP 50
 
 // std includes
 #include <random>
@@ -88,6 +88,7 @@ public:
     }
 
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
+    exploration_controller_->subscribePlanFinished(boost::bind(&KTHStageNode::planFinishedCallback, this, _1, _2));
 
     groundtruth_odom_subscriber_ = private_nh_.subscribe("/base_pose_ground_truth", 5, &KTHStageNode::groundtruthOdomCallback, this);
   }
@@ -112,6 +113,97 @@ public:
     return groundtruth_odom_;
   }
 
+  void recordPlanInformation(const SimpleExplorationController &exploration_controller, int interation, int plan_number)
+  {
+    auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
+    auto planner = exploration_controller.getPlanner();
+
+    //---- get raw costmap and clusted_frontier_points, resolution is the same with original costmap ---
+    // get costMap with three channels, unkown, free, obstacle
+    cv::Mat rawCostMap = frontier_analysis::getRawMap(costmap_2d_ros);
+    cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
+
+    // get robot pose
+    Pose2D robotPose = exploration_controller.getRobotPose();
+
+    // get plan related info
+    std::vector<geometry_msgs::PoseStamped> plan_world_poses;
+    std::vector<double> plan_ms_times, plan_explored_areas;
+    exploration_controller.getLastPlanInfo(plan_world_poses, plan_ms_times, plan_explored_areas);
+    std::vector<Pose2D> plan_poses = frontier_analysis::worldPosesToMapPoses(plan_world_poses, costmap_2d_ros);
+
+    // get frontiers points with the same resolution of costmap
+    std::vector<std::vector<Pose2D>> all_clusters_frontiers;
+    frontier_analysis::getFrontierPoints(costmap_2d_ros, planner, all_clusters_frontiers);
+
+    // get frontiers cluster centers with the same resolution of costmap
+    std::vector<Pose2D> frontier_cluster_centers;
+    frontier_analysis::getFronierCenters(costmap_2d_ros, planner, frontier_cluster_centers);
+
+    //--- resize costmap and clusted_frontier_points to the same resolution of ground_truth map---
+    double resize_ratio = costmap_2d_ros->getCostmap()->getResolution() / MAP_RESOLUTION;
+
+    cv::Mat costMap_resize;
+    std::vector<std::vector<Pose2D>> frontiers_resize;
+    std::vector<Pose2D> frontier_centers_resize;
+    std::vector<Pose2D> plan_poses_resize;
+    Pose2D robotPose_resize;
+
+    // only resize when the ratio is not equal to 1
+    if(std::abs(resize_ratio - 1.0) > 1e-6)
+    {
+      cv::resize(costMap, costMap_resize, cv::Size(), resize_ratio, resize_ratio);
+      frontier_analysis::resizePoints(all_clusters_frontiers, frontiers_resize, resize_ratio);
+      frontier_analysis::resizePoints(frontier_cluster_centers, frontier_centers_resize, resize_ratio);
+      robotPose_resize = frontier_analysis::resizePoint(robotPose, resize_ratio);
+      frontier_analysis::resizePoints(plan_poses, plan_poses_resize, resize_ratio);
+    }
+    else
+    {
+      costMap_resize = costMap;
+      frontiers_resize = all_clusters_frontiers;
+      frontier_centers_resize = frontier_cluster_centers;
+      robotPose_resize = robotPose;
+      plan_poses_resize = plan_poses;
+    }
+
+    //----- clip or padding costmap and frontier_points to adapt the size of ground truth----
+    cv::Size currentSize = costMap_resize.size();
+    cv::Size GTSize = current_groundtruth_map_.size();
+    cv::Mat costMap_resize_clipped = frontier_analysis::convertToGTSizeFillUnknown(costMap_resize, GTSize);
+    assert(costMap_resize_clipped.size() == GTSize);
+    std::vector<std::vector<Pose2D>> frontiers_resize_clipped;
+    std::vector<Pose2D> frontier_centers_clipped, plan_poses_clipped;
+    frontier_analysis::convertToGroundTruthSize(frontiers_resize, frontiers_resize_clipped, currentSize, GTSize);
+    frontier_analysis::convertToGroundTruthSize(frontier_centers_resize, frontier_centers_clipped, currentSize, GTSize);
+    frontier_analysis::convertToGroundTruthSize(plan_poses_resize, plan_poses_clipped, currentSize, GTSize);
+    Pose2D robotPose_resize_clipped = frontier_analysis::convertToGroundTruthSize(robotPose_resize, currentSize, GTSize);
+
+    //-------- generate bounding box and boundingBox images for frontiers ---------
+    std::vector<cv::Rect> boundingBoxes = frontier_analysis::generateBoundingBox(frontiers_resize_clipped);
+    cv::Mat boundingBoxImg = frontier_analysis::generateBoundingBoxImage(boundingBoxes, GTSize);
+
+    //-------- record map and related informations ------
+    boost::filesystem::path floorplanName(getFloorplanName());
+    string floorplan_baseName = floorplanName.stem().string(); // baseName without extension
+    data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration_, plan_number,
+                               costMap_resize_clipped, boundingBoxImg);
+    data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration_, plan_number,
+                              frontiers_resize_clipped, frontier_centers_clipped, boundingBoxes, robotPose,
+                              plan_poses_resize, plan_ms_times, plan_explored_areas);
+
+    // generate verifyImage and record it: optional
+    cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resize_clipped, boundingBoxes,
+                                                               frontiers_resize_clipped, robotPose_resize_clipped,
+                                                               plan_poses_clipped);
+    data_recorder::recordVerifyImage(data_record_dir, floorplan_baseName, iteration_, plan_number, verifyImg);
+  }
+
+  void planFinishedCallback(const SimpleExplorationController &exploration_controller, int plan_num)
+  {
+    recordPlanInformation(exploration_controller, this->iteration_, plan_num);
+  }
+
   /**
    * @brief callback function for new plan from exploration_controller_ member
    * @param exploration_controller reference to the SimpleExploration object that called this callback function
@@ -119,71 +211,12 @@ public:
    */
   void newPlanCallback(const SimpleExplorationController &exploration_controller, bool planner_status)
   {
+//    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     ROS_INFO("Received new plan");
     planner_status_ = planner_status;
     if (planner_status)
     {
-      path_planning_num ++;
-
       planner_failure_count_ = 0;
-      auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
-      auto planner = exploration_controller.getPlanner();
-
-      //---- get raw costmap and clusted_frontier_points, resolution is the same with original costmap ---
-      // get costMap with three channels, unkown, free, obstacle
-      cv::Mat rawCostMap = frontier_analysis::getRawMap(costmap_2d_ros);
-      cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
-
-      // get robot pose
-      Pose2D robotPose = exploration_controller_->getRobotPose();
-
-      // get frontiers points with the same resolution of costmap
-      std::vector<std::vector<Pose2D>> all_clusters_frontiers;
-      frontier_analysis::getFrontierPoints(costmap_2d_ros, planner, all_clusters_frontiers);
-
-
-      //--- resize costmap and clusted_frontier_points to the same resolution of ground_truth map---
-      double resize_ratio = costmap_2d_ros->getCostmap()->getResolution() / MAP_RESOLUTION;
-//      cv::Mat rawCostMap_resized;
-//      cv::resize(rawCostMap, rawCostMap_resized, cv::Size(), resize_ratio, resize_ratio);
-      cv::Mat costMap_resize;
-      cv::resize(costMap, costMap_resize, cv::Size(), resize_ratio, resize_ratio);
-      std::vector<std::vector<Pose2D>> frontiers_resize;
-      frontier_analysis::resizePoints(all_clusters_frontiers, frontiers_resize, resize_ratio);
-      Pose2D robotPose_resize = frontier_analysis::resizePoint(robotPose, resize_ratio);
-
-      //----- clip or padding costmap and frontier_points to adapt the size of ground truth----
-      cv::Size currentSize = costMap_resize.size(), GTSize = current_groundtruth_map_.size();
-//      cv::Mat rawCostMap_resized_clipped = frontier_analysis::convertToGroundtruthSize(rawCostMap_resized, GTSize);
-      cv::Mat costMap_resize_clipped = frontier_analysis::convertToGTSizeFillUnknown(costMap_resize, GTSize);
-      assert(costMap_resize_clipped.size() == GTSize);
-      std::vector<std::vector<Pose2D>> frontiers_resize_clipped;
-      frontier_analysis::convertToGroundTruthSize(frontiers_resize, frontiers_resize_clipped, currentSize, GTSize);
-      Pose2D robotPose_resize_clipped = frontier_analysis::convertToGroundTruthSize(robotPose_resize, currentSize, GTSize);
-
-      //-------- generate bounding box and boundingBox images for frontiers ---------
-      std::vector<cv::Rect> boundingBoxes = frontier_analysis::generateBoundingBox(frontiers_resize_clipped);
-      cv::Mat boundingBoxImg = frontier_analysis::generateBoundingBoxImage(boundingBoxes, GTSize);
-
-      //-------- record map and related informations ------
-      boost::filesystem::path floorplanName(getFloorplanName());
-      string floorplan_baseName = floorplanName.stem().string(); // baseName without extension
-//      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-//                                 rawCostMap, "raw_costmap_original");
-//      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-//                                 rawCostMap_resized_clipped, "raw_costmap");
-      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-                                 costMap_resize_clipped, boundingBoxImg);
-      data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-                                frontiers_resize_clipped, boundingBoxes, robotPose);
-
-//      data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration, path_planning_num,
-//                                 rawCostMap_thres, "raw_costmap_original_thres");
-
-      // generate verifyImage and record it: optional
-      cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resize_clipped, boundingBoxes,
-          frontiers_resize_clipped, robotPose_resize_clipped);
-      data_recorder::recordVerifyImage(data_record_dir, floorplan_baseName, iteration, path_planning_num, verifyImg);
     }
     else
     {
@@ -223,6 +256,7 @@ public:
     boost::shared_ptr<SimpleExplorationController> control_ptr(new SimpleExplorationController());
     this->exploration_controller_ = control_ptr;
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
+    exploration_controller_->subscribePlanFinished(boost::bind(&KTHStageNode::planFinishedCallback, this, _1, _2));
 
     if (exploration_controller_)
     {
@@ -287,6 +321,10 @@ public:
       do
       {
         stage_interface_->step();
+
+        while (!is_latest_sensor_received_);
+        is_latest_sensor_received_ = false;
+
         exploration_controller_->generateCmdVel();
 
         // don't update the plan in the middle of execution of another one. The planner takes a long time, hence the by
@@ -296,8 +334,7 @@ public:
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        while (!is_latest_sensor_received_);
-        is_latest_sensor_received_ = false;
+
 
         if (!isRobotWithinMap())
         {
@@ -334,10 +371,12 @@ public:
       map_num = 0;
     }
 
+    map_num = 0;
+
     for (int i = map_num; i < kth_stage_loader_->getFloorplans().size(); i++, map_num ++)
     {
       const KTHStageLoader::floorplan_t &floorplan = kth_stage_loader_->getFloorplans()[i];
-      iteration = 0;
+      iteration_ = 0;
       if (floorplan.unobstructed_points.empty())
       {
         continue;
@@ -346,8 +385,7 @@ public:
       // run in the same map a number of times
       for (size_t floorplan_run_idx = 0; floorplan_run_idx < NUM_RUNS_IN_ONE_MAP; floorplan_run_idx++)
       {
-        iteration ++;
-        path_planning_num = 0;
+        iteration_ ++;
 
         size_t random_index = std::rand() % floorplan.unobstructed_points.size();
         Point2D random_point_meters = convertMapCoordsToMeters(
@@ -384,7 +422,7 @@ public:
           );
         }
 
-        data_recorder::writeConfig(this->getFloorplanName(), map_num, iteration);
+        data_recorder::writeConfig(this->getFloorplanName(), map_num, iteration_);
 
         runStageWorld();
 
@@ -453,11 +491,6 @@ public:
   bool isResetStageWorld()
   {
     return reset_stage_world_;
-  }
-
-  bool clearResetStageWorld()
-  {
-    reset_stage_world_ = false;
   }
 
   int sensorsCallback(const sensor_msgs::LaserScanConstPtr &laser_scan, const nav_msgs::OdometryConstPtr &odom)
@@ -541,6 +574,8 @@ protected:
   boost::shared_ptr<StageInterface> stage_interface_;
   boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world_;
   boost::atomic_bool reset_stage_world_;
+
+//  bool reset_stage_world_;
   std::string world_file_;
   int argc_;
   char **argv_;
@@ -555,8 +590,7 @@ protected:
 
   // current State: which map is running, the running iteration, the path planning number
   int map_num = 0;
-  int iteration = 0;
-  int path_planning_num = 0;
+  int iteration_ = 0;
 
   bool is_gui_;
 };
@@ -587,7 +621,7 @@ int main(int argc, char **argv)
 
   while (ros::ok())
   {
-    if (Fl::first_window() && !kth_stage_node.isResetStageWorld())
+    if (is_gui && Fl::first_window() && !kth_stage_node.isResetStageWorld())
     {
       Fl::wait();
     }
