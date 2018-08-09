@@ -120,7 +120,9 @@ namespace stage_frontier_datagen {
                     const Pose2D& robotPose,
                     const std::vector<Pose2D> &plan_poses,
                     const std::vector<double> &plan_ms_times,
-                    const std::vector<double> &plan_explored_areas)
+                    const std::vector<double> &plan_explored_areas,
+                    double simulation_time,
+                    double planner_time)
     {
       fs::path record_path = constructPath(base_dir, map_name, iteration);
       if(!fs::exists(record_path))
@@ -138,9 +140,11 @@ namespace stage_frontier_datagen {
       root["Frontier_centers"] = centers;
       root["BoundingBoxes"] = bb_nodes;
       root["RobotPose"] = robot_pose_node;
-      root["plan_poses"] = Poses2Json(plan_poses);
-      root["plan_times"] = nums2Json(plan_ms_times);
-      root["plan_areas"] = nums2Json(plan_explored_areas);
+      root["RobotPosesInPlan"] = Poses2Json(plan_poses);
+      root["TimesInPlan"] = nums2Json(plan_ms_times);
+      root["AreasExploredInPlan"] = nums2Json(plan_explored_areas);
+      root["SimulationTime"] = simulation_time;
+      root["PlannerTime"] = planner_time;
 
       Json::StyledWriter writer;
       std::string json_str = writer.write(root);

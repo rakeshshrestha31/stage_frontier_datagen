@@ -60,7 +60,6 @@ public:
       reset_stage_world_(false),
       is_latest_sensor_received_(false),
       private_nh_("~"),
-      exploration_controller_(new SimpleExplorationController()),
       planner_status_(true),
       planner_failure_count_(0),
 //      spin_thread_(&KTHStageNode::spin, this),
@@ -87,9 +86,6 @@ public:
       ROS_ERROR("no valid floorplan");
     }
 
-    exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
-    exploration_controller_->subscribePlanFinished(boost::bind(&KTHStageNode::planFinishedCallback, this, _1, _2));
-
     groundtruth_odom_subscriber_ = private_nh_.subscribe("/base_pose_ground_truth", 5, &KTHStageNode::groundtruthOdomCallback, this);
   }
 
@@ -113,14 +109,15 @@ public:
     return groundtruth_odom_;
   }
 
-  void recordPlanInformation(const SimpleExplorationController &exploration_controller, int interation, int plan_number)
+  void recordPlanInformation(const SimpleExplorationController &exploration_controller,
+      int interation, int plan_number)
   {
-    auto costmap_2d_ros = exploration_controller.getCostmap2DROS();
     auto planner = exploration_controller.getPlanner();
+    auto custom_costmap = exploration_controller.getCostmap2DROS();
 
     //---- get raw costmap and clusted_frontier_points, resolution is the same with original costmap ---
     // get costMap with three channels, unkown, free, obstacle
-    cv::Mat rawCostMap = frontier_analysis::getRawMap(costmap_2d_ros);
+    cv::Mat rawCostMap = frontier_analysis::getRawMap(custom_costmap);
     cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
 
     // get robot pose
@@ -129,19 +126,21 @@ public:
     // get plan related info
     std::vector<geometry_msgs::PoseStamped> plan_world_poses;
     std::vector<double> plan_ms_times, plan_explored_areas;
-    exploration_controller.getLastPlanInfo(plan_world_poses, plan_ms_times, plan_explored_areas);
-    std::vector<Pose2D> plan_poses = frontier_analysis::worldPosesToMapPoses(plan_world_poses, costmap_2d_ros);
+    double simu_time, planner_time;
+    exploration_controller.getLastPlanInfo(plan_world_poses, plan_ms_times,
+        plan_explored_areas, simu_time, planner_time);
+    std::vector<Pose2D> plan_poses = frontier_analysis::worldPosesToMapPoses(plan_world_poses, custom_costmap);
 
     // get frontiers points with the same resolution of costmap
     std::vector<std::vector<Pose2D>> all_clusters_frontiers;
-    frontier_analysis::getFrontierPoints(costmap_2d_ros, planner, all_clusters_frontiers);
+    frontier_analysis::getFrontierPoints(custom_costmap, planner, all_clusters_frontiers);
 
     // get frontiers cluster centers with the same resolution of costmap
     std::vector<Pose2D> frontier_cluster_centers;
-    frontier_analysis::getFronierCenters(costmap_2d_ros, planner, frontier_cluster_centers);
+    frontier_analysis::getFronierCenters(custom_costmap, planner, frontier_cluster_centers);
 
     //--- resize costmap and clusted_frontier_points to the same resolution of ground_truth map---
-    double resize_ratio = costmap_2d_ros->getCostmap()->getResolution() / MAP_RESOLUTION;
+    double resize_ratio = custom_costmap->getCostmap()->getResolution() / MAP_RESOLUTION;
 
     cv::Mat costMap_resize;
     std::vector<std::vector<Pose2D>> frontiers_resize;
@@ -190,7 +189,7 @@ public:
                                costMap_resize_clipped, boundingBoxImg);
     data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration_, plan_number,
                               frontiers_resize_clipped, frontier_centers_clipped, boundingBoxes, robotPose,
-                              plan_poses_resize, plan_ms_times, plan_explored_areas);
+                              plan_poses_resize, plan_ms_times, plan_explored_areas, simu_time, planner_time);
 
     // generate verifyImage and record it: optional
     cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resize_clipped, boundingBoxes,
@@ -201,7 +200,7 @@ public:
 
   void planFinishedCallback(const SimpleExplorationController &exploration_controller, int plan_num)
   {
-    recordPlanInformation(exploration_controller, this->iteration_, plan_num);
+    recordPlanInformation(exploration_controller, iteration_, plan_num);
   }
 
   /**
@@ -253,7 +252,7 @@ public:
     reset_stage_world_ = false;
 
     // create new exploration_controller
-    boost::shared_ptr<SimpleExplorationController> control_ptr(new SimpleExplorationController());
+    boost::shared_ptr<SimpleExplorationController> control_ptr(new SimpleExplorationController(this->stage_world_));
     this->exploration_controller_ = control_ptr;
     exploration_controller_->subscribeNewPlan(boost::bind(&KTHStageNode::newPlanCallback, this, _1, _2));
     exploration_controller_->subscribePlanFinished(boost::bind(&KTHStageNode::planFinishedCallback, this, _1, _2));

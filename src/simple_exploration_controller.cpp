@@ -39,20 +39,23 @@
 
 namespace stage_frontier_datagen
 {
-SimpleExplorationController::SimpleExplorationController(const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor)
-  : update_cmd_vel_functor_(update_cmd_vel_functor),
+SimpleExplorationController::SimpleExplorationController(
+    boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world,
+    const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor)
+  : stage_world_(stage_world),
+    update_cmd_vel_functor_(update_cmd_vel_functor),
     planner_(new hector_exploration_planner::HectorExplorationPlanner()),
     plan_update_callback_(0),
     plan_finished_callback_(0),
     is_planner_initialized_(false),
     is_planner_running_(false),
     is_plan_update_callback_running_(false),
+    is_plan_finished_callback_running_(false),
     planner_status_(false),
     last_planner_status_(false),
     plan_number_(0)
 {
   path_follower_.initialize(&tfl_);
-
   // TODO: update exploration plan a few waypoints before your previous plan will finish
 //  exploration_plan_generation_timer_ = nh_.createTimer(ros::Duration(1.0),
 //                                                       &SimpleExplorationController::timerPlanExploration, this, false);
@@ -120,19 +123,37 @@ bool SimpleExplorationController::updatePlan()
   getRobotPose(this->robot_pose_at_plan_end);
 
   auto planner_thread = boost::thread([this, pose]() {
+
+    // last simulation is end, so record the simulation time
+    stage_simu_time_end_ = stage_world_->SimTimeNow();
+    stage_simu_time_ = (stage_simu_time_end_ - stage_simu_time_begin_) / 1e3; // millisecond
+
     nav_msgs::Path path;
     is_planner_running_ = true;
+
     ROS_INFO("running planner...");
+    std::chrono::steady_clock::time_point begin_t = std::chrono::steady_clock::now();
     planner_status_ = planner_->doExploration(pose, path.poses);
 
-    // invoke finished call_back after doExploration so that frontiers is updated
-    // also write info before set is_planner_running by false to guarantee costmap is not changed
-    if(last_planner_status_ && plan_finished_callback_)
-    {
-      plan_finished_callback_(*this, this->plan_number_);
-    }
+    std::chrono::steady_clock::time_point end_t = std::chrono::steady_clock::now();
+    plan_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end_t-begin_t).count();
 
     is_planner_running_ = false;
+
+    // now new simulation is begin, record simulation begin time
+    stage_simu_time_begin_ = stage_world_->SimTimeNow();
+
+    // record old explored costmap and frontiers detected after planner
+    if(last_planner_status_ && plan_finished_callback_)
+    {
+      if (!is_plan_finished_callback_running_) {
+        is_plan_finished_callback_running_ = true;
+        plan_finished_callback_(*this, this->plan_number_);
+        is_plan_finished_callback_running_ = false;
+      } else {
+        ROS_WARN("Skipping plan_finished_callback because previous one hasn't finished");
+      }
+    }
 
     if (path.poses.empty()) {
       planner_status_ = false;
@@ -277,6 +298,7 @@ void SimpleExplorationController::generateCmdVel()
     // empty twist while planning
     geometry_msgs::Twist empty_vel;
     vel_pub_.publish(empty_vel);
+    // TODO: save total planning time
     // block while planning
     while (is_planner_running_);
     return;
@@ -296,6 +318,9 @@ void SimpleExplorationController::generateCmdVel()
     if (!is_planner_running_)
     {
       updatePlan();
+      // TODO: save total planning time
+      // block while planning
+      while (is_planner_running_);
     }
   }
   else
@@ -343,8 +368,11 @@ void SimpleExplorationController::clearPlanData()
 void SimpleExplorationController::clearData()
 {
   this->plan_number_ = 0;
+  this->stage_simu_time_begin_ = 0;
+  this->stage_simu_time_ = 0;
+  this->stage_simu_time_end_ = 0;
   this->last_planner_status_ = false;
-  planner_status_ = false;
+  this->planner_status_ = false;
   clearPlanData();
   clearCostmap();
 }
@@ -396,11 +424,8 @@ Pose2D SimpleExplorationController::getRobotPose() const
   auto robotPoseStamped = getRobotPoseAtPlanEnd();
   auto costmap_2d_ros = getCostmap2DROS();
   auto costmap = costmap_2d_ros->getCostmap();
-  auto resolution = costmap->getResolution();
-  auto size_x = costmap->getSizeInCellsX();
-  auto size_y = costmap->getSizeInCellsY();
 
-  Pose2D pose = worldPose2MapPose(robotPoseStamped, resolution, size_x, size_y);
+  Pose2D pose = worldPose2MapPose(robotPoseStamped, *costmap);
 
   return pose;
 }

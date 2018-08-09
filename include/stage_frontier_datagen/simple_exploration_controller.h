@@ -18,6 +18,7 @@
 #include <boost/function.hpp>
 
 #include <hector_exploration_planner/frontier_analysis.h>
+#include <stage_frontier_datagen/stage_interface.h>
 
 using namespace hector_exploration_planner::frontier_analysis;
 
@@ -26,7 +27,9 @@ namespace stage_frontier_datagen
 class SimpleExplorationController
 {
 public:
-  SimpleExplorationController(const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor=0);
+  SimpleExplorationController(
+      boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world,
+      const boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor=0);
 
   /**
    * @brief runs hector_navigation_planner methods to get navigation path based on exploration transform optimization
@@ -140,12 +143,16 @@ public:
   void getLastPlanInfo(
       std::vector<geometry_msgs::PoseStamped> &robot_poses,
       std::vector<double> &times,
-      std::vector<double> &areas
+      std::vector<double> &areas,
+      double &simu_time_secs,
+      double &planner_time_secs
       ) const
   {
     robot_poses = this->robot_poses_in_plan;
     times = this->ms_time_stamps_in_plan;
     areas = this->explored_area_in_plan;
+    simu_time_secs = this->stage_simu_time_;
+    planner_time_secs = this->plan_time_;
   }
 
   std::vector<geometry_msgs::PoseStamped> getRobotPosesInPlan() const {return this->robot_poses_in_plan;}
@@ -196,13 +203,15 @@ protected:
   boost::shared_ptr<hector_exploration_planner::CustomCostmap2DROS> costmap_2d_ros_;
   boost::shared_ptr<ground_truth_layer::GroundTruthLayer> ground_truth_layer_;
 
+  boost::shared_ptr<StageInterface::AbstractStepWorld> stage_world_;
+
   boost::shared_ptr<hector_exploration_planner::HectorExplorationPlanner> planner_;
   pose_follower::HectorPathFollower path_follower_;
 
   boost::mutex path_mutex_;
   boost::atomic_bool is_planner_running_;
-  boost::function<void(const SimpleExplorationController&, bool)> plan_update_callback_;  ///< callback on plan update
-  boost::function<void(const SimpleExplorationController&, int)> plan_finished_callback_;  ///< callback on plan update
+  boost::function<void(const SimpleExplorationController&, bool)> plan_update_callback_;  ///< callback on new plan update
+  boost::function<void(const SimpleExplorationController&, int)> plan_finished_callback_;  /// callback after a plan is finished
 
   boost::mutex update_cmd_vel_functor_mutex_;
   boost::function<void(const geometry_msgs::Twist&)> update_cmd_vel_functor_;
@@ -221,12 +230,19 @@ protected:
   boost::atomic_bool planner_status_;
   bool last_planner_status_;
   boost::atomic_bool is_plan_update_callback_running_;
+  boost::atomic_bool is_plan_finished_callback_running_;
 
   std::vector<geometry_msgs::PoseStamped> robot_poses_in_plan;
   std::vector<double> ms_time_stamps_in_plan;
   std::vector<double> explored_area_in_plan;
 
-  int plan_number_;
+  // the stage simulation time between two plan, (exclude planning time)
+  double stage_simu_time_begin_ = 0;
+  double stage_simu_time_end_ = 0;
+  double stage_simu_time_ = 0;  // simulation time between two planner
+  double plan_time_ = 0;
+
+  int plan_number_ = 0;
 
   geometry_msgs::PoseStamped robot_pose_at_plan_end;
 

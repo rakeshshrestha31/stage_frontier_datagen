@@ -115,6 +115,11 @@ namespace stage_frontier_datagen {
      * @param frontier_cluster_centers frontier cluster centers
      * @param frontierBoundingBox all Bounding-Box for each cluster of frontiers
      * @param robotPose robot pose when last plan finished
+     * @param plan_poses all the robot poses in the process of finish a plan
+     * @param plan_ms_times all the time stamp use in the process of finishing a plan
+     * @param plan_explored_areas the (accumulated) explored areas in the process of finishing a plan
+     * @param simulation_time, simulation_time between two plan
+     * @param planner_time time used to plan
      */
     void recordInfo(std::string base_dir, std::string map_name, int iteration, int planning_num,
                     const std::vector<std::vector<Pose2D>> &frontier_clusters,
@@ -123,7 +128,9 @@ namespace stage_frontier_datagen {
                     const Pose2D& robotPose,
                     const std::vector<Pose2D> &plan_poses,
                     const std::vector<double> &plan_ms_times,
-                    const std::vector<double> &plan_explored_areas);
+                    const std::vector<double> &plan_explored_areas,
+                    double simulation_time,
+                    double planner_time);
     /**
      * @brief write configuration files to record the current state in collecting data
      * @param map_name the floorplan map name
