@@ -1,0 +1,4 @@
+hector_exploration_planner:
+  min_frontier_cluster_size: 5
+  min_frontier_to_obstacle_dist: 5
+  use_danger: true
