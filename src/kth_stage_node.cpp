@@ -14,7 +14,7 @@
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
-#define NUM_RUNS_IN_ONE_MAP 50
+#define NUM_RUNS_IN_ONE_MAP 10
 
 // std includes
 #include <random>
@@ -62,7 +62,7 @@ public:
       private_nh_("~"),
       planner_status_(true),
       planner_failure_count_(0),
-//      spin_thread_(&KTHStageNode::spin, this),
+      spin_thread_(&KTHStageNode::spin, this),
       kth_stage_loader_(new KTHStageLoader()),
       last_plan_time_(0)
   {
@@ -113,11 +113,11 @@ public:
       int interation, int plan_number)
   {
     auto planner = exploration_controller.getPlanner();
-    auto custom_costmap = exploration_controller.getCostmap2DROS();
+    costmap_2d::Costmap2D* costmap = exploration_controller.getLastCostmap();
 
     //---- get raw costmap and clusted_frontier_points, resolution is the same with original costmap ---
     // get costMap with three channels, unkown, free, obstacle
-    cv::Mat rawCostMap = frontier_analysis::getRawMap(custom_costmap);
+    cv::Mat rawCostMap = frontier_analysis::getRawMap(*costmap);
     cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
 
     // get robot pose
@@ -125,22 +125,22 @@ public:
 
     // get plan related info
     std::vector<geometry_msgs::PoseStamped> plan_world_poses;
-    std::vector<double> plan_ms_times, plan_explored_areas;
-    double simu_time, planner_time;
+    std::vector<double> plan_ms_times, plan_explored_areas, simulation_times;
+    double planner_time;
     exploration_controller.getLastPlanInfo(plan_world_poses, plan_ms_times,
-        plan_explored_areas, simu_time, planner_time);
-    std::vector<Pose2D> plan_poses = frontier_analysis::worldPosesToMapPoses(plan_world_poses, custom_costmap);
+        plan_explored_areas, simulation_times, planner_time);
+    std::vector<Pose2D> plan_poses = frontier_analysis::worldPosesToMapPoses(plan_world_poses, *costmap);
 
     // get frontiers points with the same resolution of costmap
     std::vector<std::vector<Pose2D>> all_clusters_frontiers;
-    frontier_analysis::getFrontierPoints(custom_costmap, planner, all_clusters_frontiers);
+    frontier_analysis::getFrontierPoints(planner, all_clusters_frontiers);
 
     // get frontiers cluster centers with the same resolution of costmap
     std::vector<Pose2D> frontier_cluster_centers;
-    frontier_analysis::getFronierCenters(custom_costmap, planner, frontier_cluster_centers);
+    frontier_analysis::getFronierCenters(planner, frontier_cluster_centers);
 
     //--- resize costmap and clusted_frontier_points to the same resolution of ground_truth map---
-    double resize_ratio = custom_costmap->getCostmap()->getResolution() / MAP_RESOLUTION;
+    double resize_ratio = costmap->getResolution() / MAP_RESOLUTION;
 
     cv::Mat costMap_resize;
     std::vector<std::vector<Pose2D>> frontiers_resize;
@@ -189,7 +189,7 @@ public:
                                costMap_resize_clipped, boundingBoxImg);
     data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration_, plan_number,
                               frontiers_resize_clipped, frontier_centers_clipped, boundingBoxes, robotPose,
-                              plan_poses_resize, plan_ms_times, plan_explored_areas, simu_time, planner_time);
+                              plan_poses_resize, plan_ms_times, plan_explored_areas, simulation_times, planner_time);
 
     // generate verifyImage and record it: optional
     cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resize_clipped, boundingBoxes,
@@ -386,7 +386,11 @@ public:
       {
         iteration_ ++;
 
-        size_t random_index = std::rand() % floorplan.unobstructed_points.size();
+//        size_t random_index = std::rand() % floorplan.unobstructed_points.size();
+        size_t random_index = (size_t)(
+            (float)floorplan_run_idx / NUM_RUNS_IN_ONE_MAP *
+            (floorplan.unobstructed_points.size() - 1)
+        );
         Point2D random_point_meters = convertMapCoordsToMeters(
           Point2D(
             floorplan.unobstructed_points.at(random_index).x,

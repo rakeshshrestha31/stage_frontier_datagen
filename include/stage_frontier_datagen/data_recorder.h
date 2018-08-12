@@ -129,7 +129,7 @@ namespace stage_frontier_datagen {
                     const std::vector<Pose2D> &plan_poses,
                     const std::vector<double> &plan_ms_times,
                     const std::vector<double> &plan_explored_areas,
-                    double simulation_time,
+                    const std::vector<double> &simulation_times,
                     double planner_time);
     /**
      * @brief write configuration files to record the current state in collecting data

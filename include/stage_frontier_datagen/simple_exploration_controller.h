@@ -144,16 +144,18 @@ public:
       std::vector<geometry_msgs::PoseStamped> &robot_poses,
       std::vector<double> &times,
       std::vector<double> &areas,
-      double &simu_time_secs,
+      std::vector<double> &simulation_times,
       double &planner_time_secs
       ) const
   {
     robot_poses = this->robot_poses_in_plan;
     times = this->ms_time_stamps_in_plan;
     areas = this->explored_area_in_plan;
-    simu_time_secs = this->stage_simu_time_;
+    simulation_times = this->simulation_times_in_plan;
     planner_time_secs = this->plan_time_;
   }
+
+  costmap_2d::Costmap2D* getLastCostmap() const {return last_costmap_;}
 
   std::vector<geometry_msgs::PoseStamped> getRobotPosesInPlan() const {return this->robot_poses_in_plan;}
 
@@ -235,15 +237,13 @@ protected:
   std::vector<geometry_msgs::PoseStamped> robot_poses_in_plan;
   std::vector<double> ms_time_stamps_in_plan;
   std::vector<double> explored_area_in_plan;
+  std::vector<double> simulation_times_in_plan;
 
-  // the stage simulation time between two plan, (exclude planning time)
-  double stage_simu_time_begin_ = 0;
-  double stage_simu_time_end_ = 0;
-  double stage_simu_time_ = 0;  // simulation time between two planner
   double plan_time_ = 0;
-
+  // the number of planner
   int plan_number_ = 0;
 
+  costmap_2d::Costmap2D* last_costmap_;
   geometry_msgs::PoseStamped robot_pose_at_plan_end;
 
   // protected methods

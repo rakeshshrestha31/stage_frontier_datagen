@@ -122,38 +122,37 @@ bool SimpleExplorationController::updatePlan()
   // record robot pose at the end pose of last plan
   getRobotPose(this->robot_pose_at_plan_end);
 
-  auto planner_thread = boost::thread([this, pose]() {
-
-    // last simulation is end, so record the simulation time
-    stage_simu_time_end_ = stage_world_->SimTimeNow();
-    stage_simu_time_ = (stage_simu_time_end_ - stage_simu_time_begin_) / 1e3; // millisecond
+//  auto planner_thread = boost::thread([this, pose]() {
 
     nav_msgs::Path path;
+
     is_planner_running_ = true;
 
     ROS_INFO("running planner...");
     std::chrono::steady_clock::time_point begin_t = std::chrono::steady_clock::now();
     planner_status_ = planner_->doExploration(pose, path.poses);
-
     std::chrono::steady_clock::time_point end_t = std::chrono::steady_clock::now();
     plan_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end_t-begin_t).count();
 
+    // make a copy of current costmap in planner for data recording
+    last_costmap_ = new costmap_2d::Costmap2D(*(planner_->getCostMap()));
+
     is_planner_running_ = false;
 
-    // now new simulation is begin, record simulation begin time
-    stage_simu_time_begin_ = stage_world_->SimTimeNow();
-
-    // record old explored costmap and frontiers detected after planner
+    // record last explored costmap and frontiers detected after planner
     if(last_planner_status_ && plan_finished_callback_)
     {
       if (!is_plan_finished_callback_running_) {
         is_plan_finished_callback_running_ = true;
+        // since this is record the last explored area
         plan_finished_callback_(*this, this->plan_number_);
         is_plan_finished_callback_running_ = false;
       } else {
         ROS_WARN("Skipping plan_finished_callback because previous one hasn't finished");
       }
     }
+    // clear last plan data
+    clearPlanData();
 
     if (path.poses.empty()) {
       planner_status_ = false;
@@ -165,8 +164,6 @@ bool SimpleExplorationController::updatePlan()
         planner_status_ = false;
         ROS_WARN("Invalid plan, first waypoint far away from robot");
       } else {
-        // clear last plan data
-        clearPlanData();
         // update current path
         updatePath(path);
         ROS_INFO("Generated exploration current_path_ with %u poses", (unsigned int) current_path_.poses.size());
@@ -182,8 +179,6 @@ bool SimpleExplorationController::updatePlan()
       ROS_INFO("planner failed");
     }
 
-    last_planner_status_ = static_cast<bool>(planner_status_);
-
     // make sure that the previous callback finished before going to next
     if (plan_update_callback_) {
       if (!is_plan_update_callback_running_) {
@@ -194,9 +189,12 @@ bool SimpleExplorationController::updatePlan()
         ROS_WARN("Skipping plan update callback because previous one hasn't finished");
       }
     }
-  });
 
-  planner_thread.detach();
+    last_planner_status_ = static_cast<bool>(planner_status_);
+
+//    });
+//
+//  planner_thread.detach();
 
   return true;
 }
@@ -231,7 +229,7 @@ bool SimpleExplorationController::ObstaclesInWayPoints()
     auto charmap = costmap->getCharMap();
     costmap->worldToMap(current_path_.poses[i].pose.position.x,current_path_.poses[i].pose.position.y,mx,my);
     auto index = costmap->getIndex(mx,my);
-    if(charmap[index] != costmap_2d::FREE_SPACE)
+    if(charmap[index] == costmap_2d::LETHAL_OBSTACLE)
       return true;
   }
 
@@ -277,6 +275,8 @@ void SimpleExplorationController::updateStepMotionInfo()
   int cells_num_explored = map.size().height * map.size().width - cell_num_unknown;
   double area = cells_num_explored * pow(this->costmap_2d_ros_->getCostmap()->getResolution(), 2);
   this->explored_area_in_plan.push_back(area);
+  // get current simulation time
+  this->simulation_times_in_plan.push_back(stage_world_->SimTimeNow() / 1e3 ); // ms
 }
 
 void SimpleExplorationController::generateCmdVel()
@@ -363,14 +363,12 @@ void SimpleExplorationController::clearPlanData()
   robot_poses_in_plan.clear();
   ms_time_stamps_in_plan.clear();
   explored_area_in_plan.clear();
+  simulation_times_in_plan.clear();
 }
 
 void SimpleExplorationController::clearData()
 {
   this->plan_number_ = 0;
-  this->stage_simu_time_begin_ = 0;
-  this->stage_simu_time_ = 0;
-  this->stage_simu_time_end_ = 0;
   this->last_planner_status_ = false;
   this->planner_status_ = false;
   clearPlanData();
