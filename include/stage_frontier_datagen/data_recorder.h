@@ -115,9 +115,9 @@ namespace stage_frontier_datagen {
      * @param frontier_cluster_centers frontier cluster centers
      * @param frontierBoundingBox all Bounding-Box for each cluster of frontiers
      * @param robotPose robot pose when last plan finished
-     * @param plan_poses all the robot poses in the process of finish a plan
-     * @param plan_ms_times all the time stamp use in the process of finishing a plan
-     * @param plan_explored_areas the (accumulated) explored areas in the process of finishing a plan
+     * @param robots_poses all the robot poses in the process of finish a plan
+     * @param system_times all the time stamp use in the process of finishing a plan
+     * @param explored_areas the (accumulated) explored areas in the process of finishing a plan
      * @param simulation_time, simulation_time between two plan
      * @param planner_time time used to plan
      */
@@ -125,10 +125,12 @@ namespace stage_frontier_datagen {
                     const std::vector<std::vector<Pose2D>> &frontier_clusters,
                     const std::vector<Pose2D> &frontier_cluster_centers,
                     const std::vector<cv::Rect> &frontierBoundingBox,
+                    const std::vector<Pose2D> &plan,
+                    const std::vector<Pose2D> &another_plan,
                     const Pose2D& robotPose,
-                    const std::vector<Pose2D> &plan_poses,
-                    const std::vector<double> &plan_ms_times,
-                    const std::vector<double> &plan_explored_areas,
+                    const std::vector<Pose2D> &robots_poses,
+                    const std::vector<double> &system_times,
+                    const std::vector<double> &explored_areas,
                     const std::vector<double> &simulation_times,
                     double planner_time);
     /**

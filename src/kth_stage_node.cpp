@@ -14,7 +14,7 @@
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
-#define NUM_RUNS_IN_ONE_MAP 10
+#define NUM_RUNS_IN_ONE_MAP 1
 
 // std includes
 #include <random>
@@ -121,15 +121,18 @@ public:
     cv::Mat costMap = frontier_analysis::splitRawMap(rawCostMap);
 
     // get robot pose
-    Pose2D robotPose = exploration_controller.getRobotPose();
+    geometry_msgs::PoseStamped robot_world_pose = exploration_controller.getRobotPoseAtPlanEnd();
+    Pose2D robot_pose = frontier_analysis::worldPose2MapPose(robot_world_pose, *costmap);
 
     // get plan related info
-    std::vector<geometry_msgs::PoseStamped> plan_world_poses;
-    std::vector<double> plan_ms_times, plan_explored_areas, simulation_times;
+    std::vector<geometry_msgs::PoseStamped> last_plan_world, another_plan_world, robot_world_poses;
+    std::vector<double> system_times, explored_areas, simulation_times;
     double planner_time;
-    exploration_controller.getLastPlanInfo(plan_world_poses, plan_ms_times,
-        plan_explored_areas, simulation_times, planner_time);
-    std::vector<Pose2D> plan_poses = frontier_analysis::worldPosesToMapPoses(plan_world_poses, *costmap);
+    exploration_controller.getLastPlanInfo(last_plan_world, another_plan_world, robot_world_poses,
+        system_times, explored_areas, simulation_times, planner_time);
+    std::vector<Pose2D> robot_poses = frontier_analysis::worldPosesToMapPoses(robot_world_poses, *costmap);
+    std::vector<Pose2D> last_plan = frontier_analysis::worldPosesToMapPoses(last_plan_world, *costmap);
+    std::vector<Pose2D> another_plan = frontier_analysis::worldPosesToMapPoses(another_plan_world, *costmap);
 
     // get frontiers points with the same resolution of costmap
     std::vector<std::vector<Pose2D>> all_clusters_frontiers;
@@ -144,9 +147,8 @@ public:
 
     cv::Mat costMap_resize;
     std::vector<std::vector<Pose2D>> frontiers_resize;
-    std::vector<Pose2D> frontier_centers_resize;
-    std::vector<Pose2D> plan_poses_resize;
-    Pose2D robotPose_resize;
+    std::vector<Pose2D> frontier_centers_resize, robot_poses_resize, last_plan_resize, another_plan_resize;
+    Pose2D robot_pose_resize;
 
     // only resize when the ratio is not equal to 1
     if(std::abs(resize_ratio - 1.0) > 1e-6)
@@ -154,16 +156,20 @@ public:
       cv::resize(costMap, costMap_resize, cv::Size(), resize_ratio, resize_ratio);
       frontier_analysis::resizePoints(all_clusters_frontiers, frontiers_resize, resize_ratio);
       frontier_analysis::resizePoints(frontier_cluster_centers, frontier_centers_resize, resize_ratio);
-      robotPose_resize = frontier_analysis::resizePoint(robotPose, resize_ratio);
-      frontier_analysis::resizePoints(plan_poses, plan_poses_resize, resize_ratio);
+      robot_pose_resize = frontier_analysis::resizePoint(robot_pose, resize_ratio);
+      frontier_analysis::resizePoints(robot_poses, robot_poses_resize, resize_ratio);
+      frontier_analysis::resizePoints(last_plan, last_plan_resize, resize_ratio);
+      frontier_analysis::resizePoints(another_plan, another_plan_resize, resize_ratio);
     }
     else
     {
       costMap_resize = costMap;
       frontiers_resize = all_clusters_frontiers;
       frontier_centers_resize = frontier_cluster_centers;
-      robotPose_resize = robotPose;
-      plan_poses_resize = plan_poses;
+      robot_pose_resize = robot_pose;
+      robot_poses_resize = robot_poses;
+      last_plan_resize = last_plan;
+      another_plan_resize = another_plan;
     }
 
     //----- clip or padding costmap and frontier_points to adapt the size of ground truth----
@@ -172,11 +178,13 @@ public:
     cv::Mat costMap_resize_clipped = frontier_analysis::convertToGTSizeFillUnknown(costMap_resize, GTSize);
     assert(costMap_resize_clipped.size() == GTSize);
     std::vector<std::vector<Pose2D>> frontiers_resize_clipped;
-    std::vector<Pose2D> frontier_centers_clipped, plan_poses_clipped;
+    std::vector<Pose2D> frontier_centers_clipped, robot_poses_clipped, last_plan_clipped, another_plan_clipped;
     frontier_analysis::convertToGroundTruthSize(frontiers_resize, frontiers_resize_clipped, currentSize, GTSize);
     frontier_analysis::convertToGroundTruthSize(frontier_centers_resize, frontier_centers_clipped, currentSize, GTSize);
-    frontier_analysis::convertToGroundTruthSize(plan_poses_resize, plan_poses_clipped, currentSize, GTSize);
-    Pose2D robotPose_resize_clipped = frontier_analysis::convertToGroundTruthSize(robotPose_resize, currentSize, GTSize);
+    frontier_analysis::convertToGroundTruthSize(robot_poses_resize, robot_poses_clipped, currentSize, GTSize);
+    frontier_analysis::convertToGroundTruthSize(last_plan_resize, last_plan_clipped, currentSize, GTSize);
+    frontier_analysis::convertToGroundTruthSize(another_plan_resize, another_plan_clipped, currentSize, GTSize);
+    Pose2D robotPose_resize_clipped = frontier_analysis::convertToGroundTruthSize(robot_pose_resize, currentSize, GTSize);
 
     //-------- generate bounding box and boundingBox images for frontiers ---------
     std::vector<cv::Rect> boundingBoxes = frontier_analysis::generateBoundingBox(frontiers_resize_clipped);
@@ -188,13 +196,15 @@ public:
     data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration_, plan_number,
                                costMap_resize_clipped, boundingBoxImg);
     data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration_, plan_number,
-                              frontiers_resize_clipped, frontier_centers_clipped, boundingBoxes, robotPose,
-                              plan_poses_resize, plan_ms_times, plan_explored_areas, simulation_times, planner_time);
+                              frontiers_resize_clipped, frontier_centers_clipped, boundingBoxes,
+                              last_plan_clipped, another_plan_clipped, robot_pose, robot_poses_clipped,
+                              system_times, explored_areas, simulation_times, planner_time);
 
     // generate verifyImage and record it: optional
     cv::Mat verifyImg = frontier_analysis::generateVerifyImage(costMap_resize_clipped, boundingBoxes,
-                                                               frontiers_resize_clipped, robotPose_resize_clipped,
-                                                               plan_poses_clipped);
+                                                               frontiers_resize_clipped,
+                                                               last_plan_clipped, another_plan_clipped,
+                                                               robotPose_resize_clipped, robot_poses_clipped);
     data_recorder::recordVerifyImage(data_record_dir, floorplan_baseName, iteration_, plan_number, verifyImg);
   }
 

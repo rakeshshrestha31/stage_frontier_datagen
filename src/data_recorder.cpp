@@ -117,11 +117,13 @@ namespace stage_frontier_datagen {
                     const std::vector<std::vector<Pose2D>> &frontier_clusters,
                     const std::vector<Pose2D> &frontier_cluster_centers,
                     const std::vector<cv::Rect> &frontierBoundingBox,
+                    const std::vector<Pose2D> &plan,
+                    const std::vector<Pose2D> &another_plan,
                     const Pose2D& robotPose,
-                    const std::vector<Pose2D> &plan_poses,
-                    const std::vector<double> &plan_ms_times,
-                    const std::vector<double> &plan_explored_areas,
-                    const std::vector<double> & simulation_times,
+                    const std::vector<Pose2D> &robots_poses,
+                    const std::vector<double> &system_times,
+                    const std::vector<double> &explored_areas,
+                    const std::vector<double> &simulation_times,
                     double planner_time)
     {
       fs::path record_path = constructPath(base_dir, map_name, iteration);
@@ -137,13 +139,15 @@ namespace stage_frontier_datagen {
 
       Json::Value root;
       root["Frontiers"] = frontiers;
-      root["Frontier_centers"] = centers;
+      root["FrontierCenters"] = centers;
       root["BoundingBoxes"] = bb_nodes;
+      root["Plan"] = Poses2Json(plan);
+      root["AnotherPlan"] = Poses2Json(another_plan);
       root["RobotPose"] = robot_pose_node;
-      root["RobotPosesInPlan"] = Poses2Json(plan_poses);
-      root["TimesInPlan"] = nums2Json(plan_ms_times);
-      root["AreasExploredInPlan"] = nums2Json(plan_explored_areas);
-      root["SimulationTime"] = nums2Json(simulation_times);
+      root["RobotPoses"] = Poses2Json(robots_poses);
+      root["SystemTimes"] = nums2Json(system_times);
+      root["ExploredArea"] = nums2Json(explored_areas);
+      root["SimulationTimes"] = nums2Json(simulation_times);
       root["PlannerTime"] = planner_time;
 
       Json::StyledWriter writer;

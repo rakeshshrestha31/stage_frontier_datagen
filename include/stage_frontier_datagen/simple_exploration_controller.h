@@ -141,27 +141,25 @@ public:
   geometry_msgs::PoseStamped getRobotPoseAtPlanEnd() const;
 
   void getLastPlanInfo(
+      std::vector<geometry_msgs::PoseStamped> &last_plan,
+      std::vector<geometry_msgs::PoseStamped> &the_other_last_plan,
       std::vector<geometry_msgs::PoseStamped> &robot_poses,
-      std::vector<double> &times,
+      std::vector<double> &system_times,
       std::vector<double> &areas,
       std::vector<double> &simulation_times,
-      double &planner_time_secs
+      double &planner_time
       ) const
   {
+    last_plan = this->plan;
+    the_other_last_plan = this->the_other_plan;
     robot_poses = this->robot_poses_in_plan;
-    times = this->ms_time_stamps_in_plan;
+    system_times = this->system_time_in_plan;
     areas = this->explored_area_in_plan;
-    simulation_times = this->simulation_times_in_plan;
-    planner_time_secs = this->plan_time_;
+    simulation_times = this->simulation_time_in_plan;
+    planner_time = this->planner_time_;
   }
 
   costmap_2d::Costmap2D* getLastCostmap() const {return last_costmap_;}
-
-  std::vector<geometry_msgs::PoseStamped> getRobotPosesInPlan() const {return this->robot_poses_in_plan;}
-
-  std::vector<double> getTimeStampsInPlan() const {return this->ms_time_stamps_in_plan;}
-
-  std::vector<double> getExploredAreaInPlan() const {return this->explored_area_in_plan;}
 
   /**
    * get current robot pose
@@ -169,13 +167,6 @@ public:
    * @return success or not
    */
   bool getRobotPose(geometry_msgs::PoseStamped &pose);
-
-  /**
-   * @brief get the Robot Pose in the resolution of original map
-   * @param exploration_controller
-   * @return robot Pose
-   */
-  hector_exploration_planner::frontier_analysis::Pose2D getRobotPose() const;
 
   /**
    *
@@ -234,12 +225,15 @@ protected:
   boost::atomic_bool is_plan_update_callback_running_;
   boost::atomic_bool is_plan_finished_callback_running_;
 
-  std::vector<geometry_msgs::PoseStamped> robot_poses_in_plan;
-  std::vector<double> ms_time_stamps_in_plan;
-  std::vector<double> explored_area_in_plan;
-  std::vector<double> simulation_times_in_plan;
+  std::vector<geometry_msgs::PoseStamped> plan;
+  std::vector<geometry_msgs::PoseStamped> the_other_plan;
 
-  double plan_time_ = 0;
+  std::vector<geometry_msgs::PoseStamped> robot_poses_in_plan;
+  std::vector<double> system_time_in_plan;     //unit: ms
+  std::vector<double> explored_area_in_plan;   //unit: m^2
+  std::vector<double> simulation_time_in_plan; //unit: ms
+
+  double planner_time_ = 0;
   // the number of planner
   int plan_number_ = 0;
 

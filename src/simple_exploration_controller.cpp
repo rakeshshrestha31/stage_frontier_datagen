@@ -125,19 +125,24 @@ bool SimpleExplorationController::updatePlan()
 //  auto planner_thread = boost::thread([this, pose]() {
 
     nav_msgs::Path path;
+    nav_msgs::Path the_other_path;
 
     is_planner_running_ = true;
 
     ROS_INFO("running planner...");
     std::chrono::steady_clock::time_point begin_t = std::chrono::steady_clock::now();
-    planner_status_ = planner_->doExploration(pose, path.poses);
+    planner_status_ = planner_->doExploration(pose, path.poses, the_other_path.poses);
     std::chrono::steady_clock::time_point end_t = std::chrono::steady_clock::now();
-    plan_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end_t-begin_t).count();
+    planner_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end_t-begin_t).count();
 
     // make a copy of current costmap in planner for data recording
     last_costmap_ = new costmap_2d::Costmap2D(*(planner_->getCostMap()));
 
     is_planner_running_ = false;
+
+    // update current plan
+    this->plan = path.poses;
+    this->the_other_plan = the_other_path.poses;
 
     // record last explored costmap and frontiers detected after planner
     if(last_planner_status_ && plan_finished_callback_)
@@ -151,6 +156,7 @@ bool SimpleExplorationController::updatePlan()
         ROS_WARN("Skipping plan_finished_callback because previous one hasn't finished");
       }
     }
+
     // clear last plan data
     clearPlanData();
 
@@ -265,7 +271,7 @@ void SimpleExplorationController::updateStepMotionInfo()
   double cur_time = std::chrono::duration_cast< std::chrono::milliseconds>(
       std::chrono::system_clock::now().time_since_epoch()
   ).count();
-  this->ms_time_stamps_in_plan.push_back(cur_time);
+  this->system_time_in_plan.push_back(cur_time);
 
   // get current explored cells
   cv::Mat map = hector_exploration_planner::frontier_analysis::getMap(this->costmap_2d_ros_);
@@ -276,7 +282,7 @@ void SimpleExplorationController::updateStepMotionInfo()
   double area = cells_num_explored * pow(this->costmap_2d_ros_->getCostmap()->getResolution(), 2);
   this->explored_area_in_plan.push_back(area);
   // get current simulation time
-  this->simulation_times_in_plan.push_back(stage_world_->SimTimeNow() / 1e3 ); // ms
+  this->simulation_time_in_plan.push_back(stage_world_->SimTimeNow() / 1e3 ); // ms
 }
 
 void SimpleExplorationController::generateCmdVel()
@@ -361,9 +367,9 @@ void SimpleExplorationController::clearCostmap()
 void SimpleExplorationController::clearPlanData()
 {
   robot_poses_in_plan.clear();
-  ms_time_stamps_in_plan.clear();
+  system_time_in_plan.clear();
   explored_area_in_plan.clear();
-  simulation_times_in_plan.clear();
+  simulation_time_in_plan.clear();
 }
 
 void SimpleExplorationController::clearData()
@@ -415,17 +421,6 @@ bool SimpleExplorationController::getRobotPose(geometry_msgs::PoseStamped &pose)
     ROS_ERROR("poseStampedTFToMsg incorrect");
   }
   return true;
-}
-
-Pose2D SimpleExplorationController::getRobotPose() const
-{
-  auto robotPoseStamped = getRobotPoseAtPlanEnd();
-  auto costmap_2d_ros = getCostmap2DROS();
-  auto costmap = costmap_2d_ros->getCostmap();
-
-  Pose2D pose = worldPose2MapPose(robotPoseStamped, *costmap);
-
-  return pose;
 }
 
 void SimpleExplorationController::initializeCostmap()
