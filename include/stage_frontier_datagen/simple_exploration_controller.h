@@ -62,7 +62,7 @@ public:
   /**
    * @brief start the timer events for exploration
    */
-  void startExploration();
+  void startExploration(const cv::Mat& ground_truth);
 
   /**
    * @brief stop the timer events for exploration (+ sends 0 cmd_vel for safety once)

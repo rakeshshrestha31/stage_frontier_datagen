@@ -66,14 +66,14 @@ SimpleExplorationController::SimpleExplorationController(
   exploration_plan_pub_ = nh_.advertise<nav_msgs::Path>("exploration_path", 2);
 }
 
-void SimpleExplorationController::startExploration()
+void SimpleExplorationController::startExploration(const cv::Mat& ground_truth)
 {
   clearData();
   if (!costmap_2d_ros_)
   {
     initializeCostmap();
 //    costmap_2d_ros_.reset(new costmap_2d::Costmap2DROS("", tfl_));
-    planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get());
+    planner_->initialize(ros::this_node::getNamespace(), costmap_2d_ros_.get(), ground_truth);
   }
 
   exploration_plan_generation_timer_.start();

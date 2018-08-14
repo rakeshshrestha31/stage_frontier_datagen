@@ -14,7 +14,7 @@
 // time interval to call planner (in simulation time)
 #define PLANNER_CALL_INTERVAL 15
 
-#define NUM_RUNS_IN_ONE_MAP 1
+#define NUM_RUNS_IN_ONE_MAP 10
 
 // std includes
 #include <random>
@@ -319,7 +319,7 @@ public:
     planner_status_ = true;
     planner_failure_count_ = 0;
 
-    exploration_controller_->startExploration();
+    exploration_controller_->startExploration(current_groundtruth_map_);
 
     ROS_INFO("Starting exploration");
     try
@@ -380,7 +380,7 @@ public:
       map_num = 0;
     }
 
-    map_num = 0;
+    map_num = 8;
 
     for (int i = map_num; i < kth_stage_loader_->getFloorplans().size(); i++, map_num ++)
     {
