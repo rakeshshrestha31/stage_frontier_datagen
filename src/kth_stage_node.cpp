@@ -369,18 +369,18 @@ public:
    */
   void run()
   {
-    string map_name = "";
-    int map_num_t = 0, iteration_t = 0;
-    if(data_recorder::readConfig(map_name, map_num_t, iteration_t))
-    {
-      map_num = map_num_t; //here we only restore map_num
-    }
-    else
-    {
-      map_num = 0;
-    }
+//    string map_name;
+//    int map_num_t, iteration_t;
+//    if(data_recorder::readConfig(map_name, map_num_t, iteration_t))
+//    {
+//      map_num = map_num_t; //here we only restore map_num
+//    }
+//    else
+//    {
+//      map_num = 0;
+//    }
 
-    map_num = 8;
+    map_num = 0;
 
     for (int i = map_num; i < kth_stage_loader_->getFloorplans().size(); i++, map_num ++)
     {
