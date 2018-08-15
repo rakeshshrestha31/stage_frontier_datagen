@@ -1,5 +1,5 @@
 hector_exploration_planner:
-  smoothing_enabled:              true
+  smoothing_enabled:              false
   smoothed_points_per_unit:       2
   smoothed_points_throttle:       3
   smoothed_use_end_conditions:    false

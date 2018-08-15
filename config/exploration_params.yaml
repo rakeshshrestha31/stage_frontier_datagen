@@ -1,5 +1,8 @@
 hector_exploration_planner:
   min_frontier_cluster_size: 2
-  min_frontier_to_obstacle_dist: 2
-  use_info_gain: false
+  min_frontier_to_obstacle_dist: 1
+
   use_danger: true
+
+  use_info_gain: true
+  use_info_gain_gt: true
