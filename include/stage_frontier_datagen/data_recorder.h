@@ -94,6 +94,9 @@ namespace stage_frontier_datagen {
     void recordImage(std::string base_dir, std::string map_name, int iteration, int planning_num,
                      const cv::Mat &costmap, const cv::Mat &boundingBoxImg);
 
+    void recordPredictImage(std::string base_dir, std::string map_name, int iteration, int planning_num,
+                            const cv::Mat &prediction, const cv::Mat &prediction_gt);
+
     /**
      * @brief record verify Image into directory base_dir/map_name/iteration for once path-planning
      * @param base_dir base directory for recording

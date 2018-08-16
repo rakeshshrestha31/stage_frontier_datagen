@@ -107,6 +107,13 @@ namespace stage_frontier_datagen {
       recordImage(base_dir, map_name, iteration, planning_num, boundingBoxImg, "boundingBox");
     }
 
+    void recordPredictImage(std::string base_dir, std::string map_name, int iteration, int planning_num,
+                            const cv::Mat &prediction, const cv::Mat &prediction_gt)
+    {
+      recordImage(base_dir, map_name, iteration, planning_num, prediction, "prediction");
+      recordImage(base_dir, map_name, iteration, planning_num, prediction_gt, "prediction_gt");
+    }
+
     void recordVerifyImage(std::string base_dir, std::string map_name, int iteration, int planning_num,
                            cv::Mat verifyImg)
     {

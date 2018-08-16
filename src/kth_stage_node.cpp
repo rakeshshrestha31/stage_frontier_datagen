@@ -195,6 +195,12 @@ public:
     string floorplan_baseName = floorplanName.stem().string(); // baseName without extension
     data_recorder::recordImage(data_record_dir, floorplan_baseName, iteration_, plan_number,
                                costMap_resize_clipped, boundingBoxImg);
+    if(planner->useInfoGain())
+    {
+      data_recorder::recordPredictImage(data_record_dir, floorplan_baseName, iteration_, plan_number,
+                                        planner->getPrediction(), planner->getPredictionGt());
+    }
+
     data_recorder::recordInfo(data_record_dir, floorplan_baseName, iteration_, plan_number,
                               frontiers_resize_clipped, frontier_centers_clipped, boundingBoxes,
                               last_plan_clipped, another_plan_clipped, robot_pose, robot_poses_clipped,
@@ -411,6 +417,7 @@ public:
         );
 
         current_groundtruth_map_ = floorplan.map.clone();
+
         cv::imwrite(TMP_FLOORPLAN_BITMAP, current_groundtruth_map_);
 
         boost::filesystem::path floorplanName(getFloorplanName());
