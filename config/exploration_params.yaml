@@ -4,5 +4,6 @@ hector_exploration_planner:
 
   use_danger: true
 
-  use_info_gain: true
-  use_info_gain_gt: true
+  info_gain_enabled: true
+  info_gain_gt_enabled: true
+  info_gain_weight: 250
