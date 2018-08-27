@@ -8,4 +8,5 @@
     <rosparam command="load" file="$(find stage_frontier_datagen)/config/path_smoothing.yaml" ns="$(arg main_node_name)" />
 
     <rosparam command="load" file="$(find stage_frontier_datagen)/config/exploration_params.yaml" ns="$(arg main_node_name)" />
+    <rosparam command="load" file="$(find stage_frontier_datagen)/config/global_planner.yaml" ns="$(arg main_node_name)" />
 </launch>
