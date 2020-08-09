@@ -5,6 +5,6 @@
 
 To run from commandline:
 ```
-rosrun stage_frontier_datagen kth_stage_node _dataset_dir:=<kth_dataset_dir>
+rosrun stage_frontier_datagen kth_stage_node _dataset_dir:=<kth_dataset_dir> _data_record_dir:=<generated_dataset_dir>
 ```
 
